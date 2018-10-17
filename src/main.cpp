@@ -3,6 +3,8 @@
 #include <iostream>
 #include <caf/all.hpp>
 #include "command.h"
+#include "greetings.h"
+#include "circuitbreaker.h"
 using namespace std;
 using std::endl;
 using std::string;
@@ -29,14 +31,17 @@ caf::behavior mirror(event_based_actor *self){
 }
 
 void hello_actor(event_based_actor *self, const actor &buddy){
-    self->request(buddy, std::chrono::microseconds(50),greeting_service::value, "Hello Buddy!").
-    then([=](const std::string &what){
-        aout(self) << what << endl;
-    },
-    [=](const error &err){
-        aout(self) << "Error on last request" <<  " ==> "
-                << err.code() << endl;
-    });
+    for(int i = 0; i < 20; i++){
+        self->request(buddy, std::chrono::microseconds(50), atom_greetings::value, "Hello Buddy!").
+        then([=](const std::string &what){
+            aout(self) << what << endl;
+        },
+        [=](const error &err){
+            aout(self) << "Error on last request" <<  " ==> "
+                    << err.code()
+                    << endl;
+        });
+    }
 }
 
 
@@ -49,13 +54,19 @@ int main(int argc, char const *argv[])
     // create an environment 
     actor_system_config cfg;
     actor_system sys{cfg};
-
+    Service *service = new ConcreteService();
+    Service *cb = new CircuitBreaker(service);
+    int ret = cb->service_3(10);
+    ret = cb->service_2(10);
+    ///sys.logger();
     // create a new actor which propose the mirror service
     //auto mirror_actor = sys.spawn(mirror);
-    auto cmd_actor = sys.spawn<CommandActor>();
+    //auto cmd_actor = sys.spawn<CommandActor>();
+    auto greeting_actor = sys.spawn<GreetingActor>();
     // create an actor who consume the mirror service:
     //auto mirror_cusumer_actor = sys.spawn(hello_actor, mirror_actor);
-    auto mirror_cmd_actor = sys.spawn(hello_actor, cmd_actor);
+    //auto mirror_cmd_actor = sys.spawn(hello_actor, cmd_actor);
+    auto greeting_buddy_actor = sys.spawn(hello_actor, greeting_actor);
     std::cout << "Current running Actor : " 
         << sys.registry().running() << std::endl;
     

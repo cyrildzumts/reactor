@@ -7,6 +7,14 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} include)
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR})
 set(TARGET Reactor)
+set(EXECUTABLE_OUTPUT_PATH
+    ${PROJECT_BINARY_DIR}/bin
+    CACHE PATH
+    "Single directory for all libraries")
+set(LIBRARY_OUTPUT_DIRECTORY
+    ${PROJECT_BINARY_DIR}/lib
+    CACHE PATH
+    "Single directory for all libraries")
 include_directories(include)
 file(GLOB_RECURSE REACTOR_HEADERS "${SOURCE_DIR}/include/*.h")
 file (GLOB REACTOR_SOURCES "${SOURCE_DIR}/*.cpp" "${SOURCE_DIR}/include/*.h")
@@ -38,8 +46,8 @@ if(${CAF_FOUND})
 else()
     message(FATAL_ERROR "CAF not found")
 endif()
-add_library(${PROJECT_NAME}_lib STATIC ${SOURCES})
-add_executable (${TARGET} ${SOURCES})
+
+add_executable (${TARGET} ${SOURCES} "src/main.cpp")
 target_link_libraries(${TARGET} ${CAF_LIBRARIES})
 
 # look for the C++ CAF library
