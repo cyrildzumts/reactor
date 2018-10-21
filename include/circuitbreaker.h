@@ -3,6 +3,7 @@
 #include "service.h"
 #include <chrono>
 #include <future>
+#include <memory>
 
 template<class  Duration>
 using sys_time = std::chrono::time_point<std::chrono::system_clock,Duration>;
@@ -33,10 +34,11 @@ private:
     time_ms_t time_to_wait;
     time_ms_t time_to_try;
     CBSTATE state;
-    Service *service;
+    //Service *service;
+    std::shared_ptr<Service> service;
 public:
-    CircuitBreaker(Service *service);
-
+    //CircuitBreaker(Service *service);
+    CircuitBreaker(std::shared_ptr<Service> service);
     // Service interface
 public:
     int process_request(int request);

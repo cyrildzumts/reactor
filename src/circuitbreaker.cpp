@@ -1,9 +1,9 @@
 #include "circuitbreaker.h"
 #include <iostream>
 
-CircuitBreaker::CircuitBreaker(Service *service):first_call{true},time_to_try(50),time_to_wait(200),service{service}
+CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):first_call{true},time_to_try(50),time_to_wait(200)
 {
-
+    this->service = service;
     if(service){
         state = CBSTATE::CLOSED;
     }

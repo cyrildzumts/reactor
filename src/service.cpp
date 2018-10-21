@@ -24,21 +24,12 @@ const char* ServiceError::what()const noexcept{
 ConcreteService::ConcreteService(): service_resource_usage{0}, samples(100)
 {
     std::vector<int> sources_sample(200);
-    //std::fill_n(samples.begin(), 25, 0);
     std::random_device seeder;
-    std::cout << " Seeder Entropy : " << seeder.entropy() << '\n';
     const auto seed = seeder.entropy() ? seeder() : time(nullptr);
-    std::cout << " Seed : " << seed << '\n';
     std::default_random_engine gen (static_cast<std::default_random_engine::result_type>(seed));
     std::iota(sources_sample.begin(), sources_sample.end(),1);
     sample(sources_sample.cbegin(), sources_sample.cend(), samples.begin(),
                 100, gen);
-
-
-    std::cout << " Source Sample : ";
-    std::copy(sources_sample.cbegin(), sources_sample.cend(), std::ostream_iterator<int>(std::cout, " "));
-    std::cout << '\n';
-
     std::cout << " Samples : ";
     std::copy(samples.cbegin(), samples.cend(), std::ostream_iterator<int>(std::cout, " "));
     std::cout << '\n';
