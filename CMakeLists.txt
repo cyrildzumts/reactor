@@ -1,6 +1,17 @@
 project (Reactor CXX)
 cmake_minimum_required (VERSION 2.8)
-set (CMAKE_CXX_STANDARD 14)
+if(${CMAKE_VERSION} VERSION_LESS 3.8)
+    message("CMake current version doesn't support C++ 17 Standard \n"
+            "Setting C++17 flag manually. You may considere updating you CMake version")
+    set(CMAKE_C_COMPILER gcc-7)
+    set(CMAKE_CXX_COMPILER g++-7)
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread")
+    message("Setting C++ 17 Flags manually done !")
+else()
+    message("your current CMake version support C++ 17")
+    set (CMAKE_CXX_STANDARD 17)
+endif()
+
 message("Welcome to Reactor Project" )
 message("CMAKE version in use : ${CMAKE_VERSION}")
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
