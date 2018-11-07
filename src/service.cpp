@@ -30,8 +30,6 @@ ConcreteService::ConcreteService(): service_resource_usage{0}, samples(100)
     std::iota(sources_sample.begin(), sources_sample.end(),1);
     sample(sources_sample.cbegin(), sources_sample.cend(), samples.begin(),
                 100, gen);
-    //std::cout << " Samples : ";
-    //std::copy(samples.cbegin(), samples.cend(), std::ostream_iterator<int>(std::cout, " "));
     std::cout << '\n';
 
 }
@@ -43,13 +41,10 @@ int ConcreteService::process_request(int request)
     if(!((request  >= 0) && (request < samples.size()))){
         throw ServiceError("BAD REQUEST : Index out of Bound");
     }
-
     value = samples.at(request);
-
     if(!((value % 2) == 0)){
         throw ServiceError("SYSTEM::ERROR: " + std::to_string(value));
     }
-    //std::cout << __PRETTY_FUNCTION__ << " usage : " << service_resource_usage << std::endl;
     return value;
 }
 

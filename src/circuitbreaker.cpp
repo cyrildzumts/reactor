@@ -6,12 +6,12 @@ FSM *CircuitBreakerOpen::root = nullptr;
 FSM *CircuitBreakerHalfOpen::root = nullptr;
 
 
-TimeoutError::TimeoutError():std::runtime_error("BAD REQUEST"){
-    what_string = std::string("TIMEOUT REACHED");
+TimeoutError::TimeoutError():std::runtime_error("TIMEOUT"){
+    //what_string = std::string("TIMEOUT REACHED");
 }
 
 const char* TimeoutError::what()const noexcept{
-    return what_string.c_str();
+    return "TIMEOUT";
 }
 
 
@@ -21,14 +21,15 @@ int CircuitBreaker::getFailure_counter() const
     return failure_counter;
 }
 
-time_ms_t CircuitBreaker::getTime_to_try() const
+duration_ms_t CircuitBreaker::getTime_to_retry() const
 {
-    return time_to_try;
+    return time_to_retry;
 }
 
-bool CircuitBreaker::getFailure_on_last_call() const
+
+time_point_ms_t CircuitBreaker::getFailure_time() const
 {
-    return failure_on_last_call;
+    return failure_time;
 }
 
 void CircuitBreaker::change_State(FSM *fsm_state)
@@ -36,15 +37,13 @@ void CircuitBreaker::change_State(FSM *fsm_state)
     current_state = fsm_state;
 }
 
-CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):first_call{true},time_to_try(50),time_to_wait(200)
+CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):time_to_retry{1000ms}
 {
     this->service = service;
     if(service){
-        state = CBSTATE::CLOSED;
         current_state = CircuitBreakerClosed::instance();
     }
     else{
-        state = CBSTATE::OPEN;
         current_state = CircuitBreakerOpen::instance();
     }
     failure_counter = 0;
@@ -68,49 +67,8 @@ void CircuitBreaker::failure_count()
 
 int CircuitBreaker::process_request(int request)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
-    std::cout << "#########################################\n";
     int ret = -INT32_MAX;
-    /*
-    std::future_status status;
-    auto tmp = std::chrono::system_clock::now();
-
-        if(state == CBSTATE::CLOSED){
-            std::future<int> ret_future = std::async(&Service::process_request, service, request);
-            status = ret_future.wait_for(std::chrono::milliseconds(DEADLINE_TIME));
-            if( status == std::future_status::ready){
-                try {
-                    ret = ret_future.get();
-                    failure_counter = 0;
-                } catch (ServiceError &e) {
-                    failure_counter++;
-                    state = CBSTATE::OPEN;
-                    failure_time = std::chrono::system_clock::now();
-                    // take some action about that error
-                }
-            }
-            else if(status == std::future_status::timeout){
-                failure_counter++;
-                throw  new TimeoutError();
-            }
-
-        }
-        else if( state == CBSTATE::OPEN){
-            std::cout << "CIRCUIT BREAKER - Service Component is down\n"
-                      << "CIRCUIT BREAKER - Please try again later \n";
-            auto diff = tmp - failure_time;
-            if(diff.count() >= time_to_try.count()){
-                state = CBSTATE::HALF_CLOSED;
-                std::cerr << "CIRCUIT BREAKER - Trying to close the circuit and let request be sent the service component\n";
-            }
-        }
-        else if (state == CBSTATE::HALF_CLOSED){
-
-        }
-    last_call_time_point = std::chrono::system_clock::now();
-    */
     ret = current_state->call_service(this, request);
-    std::cout << "#########################################\n";
     return ret;
 }
 
@@ -118,7 +76,7 @@ int CircuitBreaker::call(int request)
 {
     int ret;
     std::future<int> ret_future = std::async(&Service::process_request, service, request);
-    std::future_status status = ret_future.wait_for(std::chrono::milliseconds(DEADLINE_TIME));
+    std::future_status status = ret_future.wait_for(std::chrono::microseconds(DEADLINE_TIME));
     if( status == std::future_status::ready){
         try {
             ret = ret_future.get();
@@ -130,11 +88,9 @@ int CircuitBreaker::call(int request)
     }
     else if(status == std::future_status::timeout){
         failure_time = std::chrono::system_clock::now();
-        throw  ServiceError("Timeout");
+        throw  TimeoutError();
     }
-
     return ret;
-
 }
 
 
@@ -145,29 +101,26 @@ FSM *CircuitBreakerOpen::instance()
         root = new CircuitBreakerOpen;
     }
     return root;
-
 }
 
 int CircuitBreakerOpen::call_service(CircuitBreaker *cbr, int request)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
-    //auto tmp = std::chrono::system_clock::now();
-    if( cbr->getTime_to_try().count()){
+    auto tmp = std::chrono::system_clock::now();
+    auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - cbr->getFailure_time());
+    auto left_time = cbr->getTime_to_retry() - elapsed_time_duration;
+    if( left_time >= 0ms){
         change_state(cbr, CircuitBreakerHalfOpen::instance());
     }
-
     throw  ServiceError("SYSTEM DOWN");
 }
 
 void CircuitBreakerOpen::trip(CircuitBreaker *cbr)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     //change_state(cbr, CircuitBreakerHalfOpen::instance());
 }
 
 void CircuitBreakerOpen::reset(CircuitBreaker *cbr)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     //change_state(cbr, CircuitBreakerClosed::instance());
 }
 
@@ -183,7 +136,6 @@ FSM *CircuitBreakerClosed::instance()
 
 int CircuitBreakerClosed::call_service(CircuitBreaker *cbr, int request)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     int ret;
     try {
         ret = cbr->call(request);
@@ -191,26 +143,28 @@ int CircuitBreakerClosed::call_service(CircuitBreaker *cbr, int request)
     } catch (ServiceError &e) {
         cbr->failure_count();
         if(cbr->getFailure_counter() > FAILURE_LIMIT){
-            std::cout << "FAILURE RATE LIMITE REACHED" << std::endl;
             this->trip(cbr);
         }
-        throw e;
+        throw e; // rethrow to inform the caller about the error.
+    }catch(TimeoutError &t){
+        cbr->failure_count();
+        if(cbr->getFailure_counter() > FAILURE_LIMIT){
+            this->trip(cbr);
+        }
+        throw t;// rethrow to inform the caller about the error.
     }
     return  ret;
 }
 
 void CircuitBreakerClosed::trip(CircuitBreaker *cbr)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     cbr->trip();
     change_state(cbr, CircuitBreakerOpen::instance());
 }
 
 void CircuitBreakerClosed::reset(CircuitBreaker *cbr)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     cbr->reset();
-    //change_state(cbr, this);
 }
 
 
@@ -224,12 +178,15 @@ FSM *CircuitBreakerHalfOpen::instance()
 
 int CircuitBreakerHalfOpen::call_service(CircuitBreaker *cbr, int request)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     int ret;
     try {
         ret = cbr->call(request);
         this->reset(cbr);
     } catch (ServiceError &e) {
+        cbr->failure_count();
+        this->trip(cbr);
+        throw e;
+    }catch (TimeoutError &e) {
         cbr->failure_count();
         this->trip(cbr);
         throw e;
@@ -239,20 +196,17 @@ int CircuitBreakerHalfOpen::call_service(CircuitBreaker *cbr, int request)
 
 void CircuitBreakerHalfOpen::trip(CircuitBreaker *cbr)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     cbr->trip();
     change_state(cbr, CircuitBreakerOpen::instance());
 }
 
 void CircuitBreakerHalfOpen::reset(CircuitBreaker *cbr)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     cbr->reset();
     change_state(cbr, CircuitBreakerClosed::instance());
 }
 
 void FSM::change_state(CircuitBreaker *cbr, FSM *state)
 {
-    std::cout << __PRETTY_FUNCTION__ << std::endl;
     cbr->change_State(state);
 }
