@@ -4,6 +4,11 @@
 #include <chrono>
 #include <future>
 #include <memory>
+#include <log.h>
+
+constexpr int OPEN_STATE = 1;
+constexpr int CLOSED_STATE = 2;
+constexpr int HALF_OPEN_STATE = 3;
 
 template<class  Duration>
 using sys_time = std::chrono::time_point<std::chrono::system_clock,Duration>;
@@ -14,17 +19,14 @@ typedef std::chrono::time_point<std::
 chrono::system_clock> time_point_ms_t;
 
 typedef  std::chrono::milliseconds time_ms_t;
-/**
- * Func must be a callable object that
- *
- */
+
 class CircuitBreaker
 {
 public:
     enum CBSTATE{
-        OPEN        = 1,
-        CLOSED      = 2,
-        HALF_CLOSED = 3
+        OPEN        = OPEN_STATE,
+        CLOSED      = CLOSED_STATE,
+        HALF_CLOSED = HALF_OPEN_STATE
     };
 private:
     int error_rate;

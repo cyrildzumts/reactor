@@ -24,6 +24,7 @@ message("Welcome to Reactor Project" )
 message("CMAKE version in use : ${CMAKE_VERSION}")
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} include)
+# set the path where cmake would look for cmake module
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR})
 set(TARGET Reactor)
 set(EXECUTABLE_OUTPUT_PATH
@@ -39,16 +40,32 @@ file(GLOB_RECURSE REACTOR_HEADERS "${SOURCE_DIR}/include/*.h")
 file (GLOB REACTOR_SOURCES "${SOURCE_DIR}/*.cpp" "${SOURCE_DIR}/include/*.h")
 #set(SOURCES ${REACTOR_SOURCES})
 file( GLOB SOURCES "src/*.cpp" "include/*.h")
-message("current header files : ${REACTOR_HEADERS}")
-message("current source files : ${REACTOR_SOURCES}")
-message("current project source directory : ${PROJECT_SOURCE_DIR}")
-message("current source directory : ${SOURCE_DIR}")
-message("current source  : ${SOURCES}")
+#message("current header files : ${REACTOR_HEADERS}")
+#message("current source files : ${REACTOR_SOURCES}")
+#message("current project source directory : ${PROJECT_SOURCE_DIR}")
+#message("current source directory : ${SOURCE_DIR}")
+#message("current source  : ${SOURCES}")
 
 # process the CMake subdirectory
 #add_subdirectory(CMake)
 #include and process the commands in CMake/FindCAF.cmake
 #set CAF root directory
+set(USE_LOGGER ON)
+
+if(USE_LOGGER)
+    find_package(Logger)
+    include(FindLogger)
+    message("Found  FindLogger.cmake")
+    message("Logger name : " ${Logger_FOUND})
+    if(Logger_FOUND)
+        include_directories(${Logger_INCLUDE_DIR})
+        message("Logger found !!" )
+        message("LOGGER_LIB" ${Logger_LIBRARY})
+        message("LOGGER_INCLUDE_DIRS" ${Logger_INCLUDE_DIR})
+    endif()
+    option(USE_LOGGER "Use Logger Capabilities provided by Logger Lib" ON)
+endif()
+
 set( CAF_ROOT_DIR $ENV{CAF_LIB})
 if(EXISTS "${CMAKE_MODULE_PATH}/FindCAF.cmake")
     message (STATUS "Found FindCAF.cmake in CMake directory")
@@ -66,7 +83,15 @@ else()
     message(FATAL_ERROR "CAF not found")
 endif()
 
+include (GetPrerequisites)
+get_prerequisites(${TARGET} DEPS 0 0 "" "")
+message("${TARGET} DEPENDS on : ")
+foreach(DEP ${DEPS})
+    message(${DEP})
+endforeach()
+
+
 add_executable (${TARGET} ${SOURCES} "src/main.cpp")
-target_link_libraries(${TARGET} ${CAF_LIBRARIES})
+target_link_libraries(${TARGET} ${CAF_LIBRARIES} ${Logger_LIBRARY})
 
 # look for the C++ CAF library

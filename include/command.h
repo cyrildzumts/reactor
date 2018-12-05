@@ -1,3 +1,5 @@
+
+/*
 #include <string>
 #include <iostream>
 #include <caf/all.hpp>
@@ -29,3 +31,4 @@ class CommandActor : public caf::event_based_actor{
     private:
         int x = 42;
 };
+*/

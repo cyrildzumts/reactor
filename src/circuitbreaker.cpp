@@ -31,12 +31,13 @@ int CircuitBreaker::process_request(int request)
             if( status == std::future_status::ready){
                 try {
                     ret = ret_future.get();
-                    std::cout << "******************************************************************\n";
-                    std::cerr << "CIRCUIT BREAKER - Service Component has processed your request\n";
-                    std::cout << "******************************************************************\n";
+                    LOG("CIRCUITBREAKER", "Request processed");
+                    //std::cout << "******************************************************************\n";
+                    //std::cerr << "CIRCUIT BREAKER - Service Component has processed your request\n";
+                    //std::cout << "******************************************************************\n";
                 } catch (ServiceError &e) {
-                    std::cout << "CIRCUIT BREAKER - Service Component could not process your request\n"
-                              << "CIRCUIT BREAKER - Error : " << e.what() << '\n';
+                    //std::cout << "CIRCUIT BREAKER - Service Component could not process your request\n"
+                     //         << "CIRCUIT BREAKER - Error : " << e.what() << '\n';
                     state = CBSTATE::OPEN;
                     failure_time = std::chrono::system_clock::now();
                 }
@@ -44,17 +45,17 @@ int CircuitBreaker::process_request(int request)
 
         }
         else if( state == CBSTATE::OPEN){
-            std::cout << "CIRCUIT BREAKER - Service Component is down\n"
-                      << "CIRCUIT BREAKER - Please try again later \n";
+            //std::cout << "CIRCUIT BREAKER - Service Component is down\n"
+            //          << "CIRCUIT BREAKER - Please try again later \n";
             auto tmp = std::chrono::system_clock::now() - failure_time;
             if(tmp.count() >= time_to_try.count()){
                 state = CBSTATE::CLOSED;
-                std::cerr << "CIRCUIT BREAKER - Trying to close the circuit and let request be sent the service component\n";
+                //std::cerr << "CIRCUIT BREAKER - Trying to close the circuit and let request be sent the service component\n";
             }
         }
     }
     else{
-        std::cout << "CIRCUIT BREAKER -  Client is sending request to fast. Please slow down\n";
+        //std::cout << "CIRCUIT BREAKER -  Client is sending request to fast. Please slow down\n";
     }
     last_call_time_point = std::chrono::system_clock::now();
     return ret;
