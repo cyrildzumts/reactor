@@ -6,44 +6,115 @@
 #include <memory>
 #include <log.h>
 
-constexpr int OPEN_STATE = 1;
-constexpr int CLOSED_STATE = 2;
-constexpr int HALF_OPEN_STATE = 3;
 
-template<class  Duration>
-using sys_time = std::chrono::time_point<std::chrono::system_clock,Duration>;
+using namespace std::chrono_literals;
 
-using sys_milliseconds = sys_time<std::chrono::milliseconds>;
+constexpr int DEADLINE_TIME = 10;
+constexpr int FAILURE_LIMIT = 2;
+constexpr int TIMEOUT_FAILURE = 3;
+
 
 typedef std::chrono::time_point<std::
 chrono::system_clock> time_point_ms_t;
 
-typedef  std::chrono::milliseconds time_ms_t;
+
+typedef  std::chrono::milliseconds duration_ms_t;
+
+class CircuitBreaker;
+
+
+
+class TimeoutError : public std::runtime_error{
+public:
+    TimeoutError();
+    // Exception Interface
+    virtual const char* what() const noexcept;
+
+private:
+    std::string what_string;
+
+};
+
+
+class FSM{
+protected:
+    virtual void change_state(CircuitBreaker *cbr, FSM *state);
+public:
+    virtual ~FSM(){}
+    virtual int call_service(CircuitBreaker *cbr,  int request) = 0;
+    virtual void trip(CircuitBreaker *cbr) = 0;
+    virtual void reset(CircuitBreaker *cbr) = 0;
+};
 
 class CircuitBreaker
 {
-public:
-    enum CBSTATE{
-        OPEN        = OPEN_STATE,
-        CLOSED      = CLOSED_STATE,
-        HALF_CLOSED = HALF_OPEN_STATE
-    };
+
 private:
-    int error_rate;
-    bool first_call;
-    time_point_ms_t last_call_time_point;
+    int failure_counter;
     time_point_ms_t failure_time;
-    time_ms_t time_to_wait;
-    time_ms_t time_to_try;
-    CBSTATE state;
-    //Service *service;
+    duration_ms_t time_to_retry;
+    FSM *current_state;
     std::shared_ptr<Service> service;
+    friend class FSM;
+
+private:
+    void change_State(FSM *fsm_state);
 public:
-    //CircuitBreaker(Service *service);
     CircuitBreaker(std::shared_ptr<Service> service);
+    void trip(); // Open the circuit when the failure rate are reached
+    void reset(); // Close the circuit and reset the failure counter
+    void failure_count();
     // Service interface
 public:
-    int process_request(int request);
+    int process_request(int request); // Client Interface: call are delegated to FSM
+    int call(int request);
+    int getFailure_counter() const;
+    duration_ms_t getTime_to_retry() const;
+    time_point_ms_t getFailure_time() const;
 };
 
+
+class CircuitBreakerOpen : public FSM{
+private:
+    static FSM *root;
+    CircuitBreakerOpen(){}
+    // FSM interface
+
+public:
+    virtual ~CircuitBreakerOpen(){}
+    static FSM *instance();
+    virtual int call_service(CircuitBreaker *cbr, int request) override;
+    virtual void trip(CircuitBreaker *cbr) override;
+    virtual void reset(CircuitBreaker *cbr) override;
+};
+
+class CircuitBreakerClosed : public FSM{
+
+private:
+    static FSM *root;
+    CircuitBreakerClosed(){}
+    // FSM interface
+
+public:
+    virtual ~CircuitBreakerClosed(){}
+    static FSM *instance();
+    virtual int call_service(CircuitBreaker *cbr, int request) override;
+    virtual void trip(CircuitBreaker *cbr) override;
+    virtual void reset(CircuitBreaker *cbr) override;
+};
+
+
+class CircuitBreakerHalfOpen : public FSM{
+
+private:
+    static FSM *root;
+    CircuitBreakerHalfOpen(){}
+    // FSM interface
+public:
+    virtual ~CircuitBreakerHalfOpen(){}
+    static FSM *instance();
+    virtual int call_service(CircuitBreaker *cbr, int request) override;
+    virtual void trip(CircuitBreaker *cbr) override;
+    virtual void reset(CircuitBreaker *cbr) override;
+};
 #endif // CIRCUITBREAKER_H

@@ -1,8 +1,10 @@
 
+
 //#define LOG_LEVEL_1
 
 #include "activeobject.h"
 #include "actuators.h"
+
 #include <string>
 #include <iostream>
 #include <memory>
@@ -12,10 +14,13 @@
 #include <thread>
 #include <log.h>
 
-std::thread client1;
-int constexpr DELAY_500_MS  = 500;
-int constexpr MAX_REQUEST =  3;
 using namespace std;
+
+int constexpr DELAY_500_MS  = 500;
+int constexpr DELAY_50_MS  = 50;
+int constexpr DELAY_100_MS  = 100;
+int constexpr MAX_REQUEST =  50;
+
 
 int print_task(int a){
     LOG ("TASK Run by ", std::this_thread::get_id());
@@ -31,12 +36,12 @@ int main(int argc, char const *argv[])
     //std::thread actuator_thread (&ActuatorController::run, &actuators);
     //LOG("Reactor Main : actuators thread id : ", actuator_thread.get_id());
     ThreadPool pool;
-    AbstractActive active;
+    //AbstractActive active;
     int r = 0;
     //pool.submit(actuators);
     for(size_t i = 0; i < MAX_REQUEST*2; i++){
         results[i] = pool.submit(std::bind(print_task, i));
-        results[i+1] = active.submit(std::bind(print_task, i));
+        //results[i+1] = active.submit(std::bind(print_task, i));
     }
     //LOG("Reactor Main ", " sending signal to ActuatorController " " thread id : ", std::this_thread::get_id(), " controller : ", actuators.getActuator_controller_id());
     //actuators.setQuit(true);

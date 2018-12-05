@@ -29,7 +29,6 @@ class Service
 {
 public:
     virtual ~Service(){}
-
     virtual int process_request(int request) = 0;
 };
 
@@ -37,15 +36,20 @@ public:
 class ConcreteService : public Service{
 private:
     int service_resource_usage;
-
     std::vector<int> samples;
-
-    //std::mutex service_mux;
-
 public:
     ConcreteService();
     // Service interface
 public:
+    /**
+     * @brief process_request return the number from samples at the location indicated by request.
+     * if that number is even, the service returns normally. If the number is odd, the
+     * service throws a ServiceError Exception.
+     * @param request : request >= 0 && request < samples.size()
+     * @return the number located at the position indicated by request in samples.
+     *   throws a ServiceError if request is invalide.
+     *
+     */
     virtual int process_request(int request);
 };
 #endif // SERVICE_H
