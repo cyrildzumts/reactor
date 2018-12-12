@@ -1,3 +1,6 @@
+#ifndef ACTUATORS_H
+#define ACTUATORS_H
+
 #include "sensor.h"
 #include "safe_queue.h"
 #include <log.h>
@@ -111,3 +114,5 @@ public:
     int getActuator_controller_id() const;
     void setActuator_controller_id(int value);
 };
+
+#endif //ACTUATORS_H

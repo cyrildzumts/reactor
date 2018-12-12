@@ -36,30 +36,20 @@ private:
     size_t workers_count;
     ThreadSafeQueue<FunctionWrapper> work_queue;
     std::vector<std::thread> threads;
-    ThreadJoins joiner;
+    //ThreadJoins joiner;
     void run(){
         while (!done) {
             FunctionWrapper task;
-//            if(work_queue.try_pop(task)){
-//                task();
-//                std::this_thread::yield();
-//            }
-//            else{
-//                std::this_thread::yield();
-//            }
-            LOG("THREADPOOL", " waiting for task to run from thread : ", std::this_thread::get_id() );
             work_queue.wait_and_pop(task);
-            LOG("THREADPOOL", " got a task to run from thread : ", std::this_thread::get_id() );
             task();
             std::this_thread::yield();
         }
     }
 
 public:
-    ThreadPool(): done{false}, joiner{threads}{
-        //workers_count = std::thread::hardware_concurrency();
-        workers_count = 4;
-        LOG("THREADPOOL ", "Current HARDWARE CONCURRENCY ", workers_count);
+    ThreadPool(): done{false}{
+        workers_count = std::thread::hardware_concurrency();
+        //workers_count = 4;
         try {
             for(unsigned i = 0; i < workers_count; ++i){
                 threads.push_back(std::thread(&ThreadPool::run, this));
@@ -70,22 +60,36 @@ public:
         }
     }
     ~ThreadPool(){
-
+        //Send a signal to every worker
         for(size_t i = 0; i < workers_count; i++){
             submit([&]{
                 done = true;
             });
         }
+        // Wait for every worker to finish before quitting.
+        std::for_each(threads.begin(), threads.end(), [&](std::thread &t){
+            if(t.joinable()){
+                t.join();
+            }
+        });
+//        for(size_t i = 0; i< threads.size(); ++i){
+//            if(threads[i].joinable()){
+//                threads[i].join();
+//            }
+//        }
         LOG("THREADPOOL is quitting ");
     }
+    /**
+     * @brief submit place the a new task in the pool to be process when
+     * a worker is free.
+     * it
+     */
     template<typename Func>
     std::future<typename std::result_of<Func()>::type> submit(Func f){
         using result_type =typename std::result_of<Func()>::type;
         std::packaged_task<result_type()> task(std::move(f));
         std::future<result_type> result(task.get_future());
-        LOG("THREADPOOL ", " submit() entry", " thread id : ", std::this_thread::get_id());
         work_queue.push(std::move(task));
-        LOG("THREADPOOL ", " submit() exit", " thread id : ", std::this_thread::get_id());
         return result;
     }
 

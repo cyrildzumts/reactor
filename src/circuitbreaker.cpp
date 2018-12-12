@@ -85,6 +85,7 @@ int CircuitBreaker::call(int request)
             failure_time = std::chrono::system_clock::now();
             throw  e;
         }
+        
     }
     else if(status == std::future_status::timeout){
         failure_time = std::chrono::system_clock::now();
