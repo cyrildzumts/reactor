@@ -50,9 +50,9 @@ void CircuitBreaker::addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer)
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
     current_state = fsm_state;
-//    if(current_state){
-//        current_state->notify();
-//    }
+    if(current_state){
+        current_state->notify();
+    }
 }
 
 CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):time_to_retry{1000ms}
@@ -92,7 +92,7 @@ int CircuitBreaker::process_request(int request, int delay)
 
 int CircuitBreaker::call(int request, int delay)
 {
-    int ret;
+    int ret = -1;
     std::future<int> ret_future = std::async(&Service::process_request, service, request, delay);
     std::future_status status = ret_future.wait_for(std::chrono::milliseconds(WAIT_TIME));
     if( status == std::future_status::ready){
@@ -103,7 +103,6 @@ int CircuitBreaker::call(int request, int delay)
             failure_time = std::chrono::system_clock::now();
             throw  e;
         }
-        
     }
     else if(status == std::future_status::timeout){
         failure_time = std::chrono::system_clock::now();
@@ -111,8 +110,6 @@ int CircuitBreaker::call(int request, int delay)
     }
     return ret;
 }
-
-
 
 FSM *CircuitBreakerOpen::instance()
 {
@@ -132,8 +129,6 @@ int CircuitBreakerOpen::call_service(CircuitBreaker *cbr, int request, int delay
     auto left_time = cbr->getTime_to_retry() - elapsed_time_duration;
     if( left_time >= 0ms){
         change_state(cbr, CircuitBreakerHalfOpen::instance());
-    }else{
-
     }
     throw  ServiceError("SYSTEM DOWN");
 }
@@ -178,7 +173,7 @@ int CircuitBreakerClosed::call_service(CircuitBreaker *cbr, int request, int del
         if(cbr->getFailure_counter() > FAILURE_LIMIT){
             this->trip(cbr);
         }
-        throw t;// rethrow to inform the caller about the error.
+        throw t; // rethrow to inform the caller about the error.
     }
     return  ret;
 }
@@ -193,7 +188,6 @@ void CircuitBreakerClosed::reset(CircuitBreaker *cbr)
 {
     cbr->reset();
 }
-
 
 FSM *CircuitBreakerHalfOpen::instance()
 {
