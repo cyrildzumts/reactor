@@ -79,7 +79,7 @@ public:
     void failure_count();
     // Service interface
 public:
-    int process_request(int request, int delay); // Client Interface: call are delegated to FSM
+    int process_request(int request, int delay = PROCESSING_DURATION); // Client Interface: call are delegated to FSM
     int call(int request, int delay);
     int getFailure_counter() const;
     duration_ms_t getTime_to_retry() const;

@@ -31,14 +31,13 @@ class Service
 {
 public:
     virtual ~Service(){}
-    virtual int process_request(int request,int delay) = 0;
+    virtual int process_request(int request,int delay = PROCESSING_DURATION) = 0;
 };
 
 
 class ConcreteService : public Service{
 private:
     int service_resource_usage;
-    int duration;
 public:
     ConcreteService();
     ConcreteService(const int &sample_size);
@@ -53,6 +52,6 @@ public:
      *   throws a ServiceError if request is invalide.
      *
      */
-    virtual int process_request(int request, int delay);
+    virtual int process_request(int request, int delay = PROCESSING_DURATION);
 };
 #endif // SERVICE_H

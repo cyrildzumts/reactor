@@ -22,7 +22,7 @@ const char* ServiceError::what()const noexcept{
 
 
 
-ConcreteService::ConcreteService(): duration{0}
+ConcreteService::ConcreteService()
 {
 
 
@@ -31,9 +31,6 @@ ConcreteService::ConcreteService(): duration{0}
 
 int ConcreteService::process_request(int request, int delay)
 {
-    //duration = Generator<PROCESSING_DURATION>::instance()->generate();
-    //LOG("Service DURATION : ", delay, "ms");
-    //service_resource_usage++;
     // simulate the time required to process the request
     std::this_thread::sleep_for(std::chrono::milliseconds(delay));
     if(!((delay % 2) == 0)){
