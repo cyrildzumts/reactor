@@ -1,6 +1,3 @@
-
-
-//#define LOG_LEVEL_1
 #include "circuitbreaker.h"
 #include <log.h>
 #include <iostream>
@@ -12,9 +9,11 @@ int constexpr MAX_REQUEST = 5;
 
 int main(int argc, char const *argv[])
 {
-    std::cout << "Reactor: Circuit Breaker " << std::endl;
-    LOG("Reactor Main entry point ", "thread id : ", std::this_thread::get_id());
+    LOG("Reactor: Circuit Breaker ");
     std::shared_ptr<Service> service{new ConcreteService()};
+    /*
+     * calling the service directly
+     */
     CircuitBreaker cb{service};
     try {
         service->process_request(MAX_REQUEST);
@@ -24,7 +23,9 @@ int main(int argc, char const *argv[])
         LOG_ERROR("MAIN -- Service Error :  ", e.what());
     }
 
-    // calling the same service through the circuit breaker
+    /*
+     * calling the same service through the circuit breaker
+     */
     try {
         cb.process_request(MAX_REQUEST);
     }
