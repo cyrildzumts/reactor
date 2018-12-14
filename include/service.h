@@ -1,5 +1,7 @@
 ﻿#ifndef SERVICE_H
 #define SERVICE_H
+#include "generator.h"
+#include <log.h>
 #include <mutex>
 #include <exception>
 #include <random>
@@ -7,7 +9,7 @@
 #include <algorithm>
 #include <vector>
 
-
+#define PROCESSING_DURATION 200
 
 class ServiceError : public std::runtime_error{
 public:
@@ -29,16 +31,17 @@ class Service
 {
 public:
     virtual ~Service(){}
-    virtual int process_request(int request) = 0;
+    virtual int process_request(int request,int delay) = 0;
 };
 
 
 class ConcreteService : public Service{
 private:
     int service_resource_usage;
-    std::vector<int> samples;
+    int duration;
 public:
     ConcreteService();
+    ConcreteService(const int &sample_size);
     // Service interface
 public:
     /**
@@ -50,6 +53,6 @@ public:
      *   throws a ServiceError if request is invalide.
      *
      */
-    virtual int process_request(int request);
+    virtual int process_request(int request, int delay);
 };
 #endif // SERVICE_H

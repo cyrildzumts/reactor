@@ -2,9 +2,11 @@
 
 //#define LOG_LEVEL_1
 
+#include "test_saver.h"
 #include "activeobject.h"
 #include "actuators.h"
 #include <string>
+#include <sstream>
 #include <iostream>
 #include <memory>
 #include "circuitbreaker.h"
@@ -14,10 +16,7 @@
 #include <log.h>
 using namespace std;
 
-int constexpr DELAY_500_MS  = 500;
-int constexpr DELAY_50_MS  = 50;
-int constexpr DELAY_100_MS  = 100;
-int constexpr MAX_REQUEST =  4;
+int constexpr MAX_REQUEST = 500;
 
 
 int print_task(int a){
@@ -28,57 +27,56 @@ int print_task(int a){
 int main(int argc, char const *argv[])
 {
     std::cout << "Reactor: Circuit Breaker " << std::endl;
-    int r = 0;
-    LOG("Reactor Main entry point ", "thread id : ", std::this_thread::get_id());
-    ActuatorController actuators;
-    std::vector<std::future<int>> results(MAX_REQUEST);
-    std::vector<std::future<int>> a_r(MAX_REQUEST);
-    std::thread actuator_thread (&ActuatorController::run, &actuators);
-    //LOG("Reactor Main : actuators thread id : ", actuator_thread.get_id());
-    ThreadPool pool;
-    AbstractActive active;
-    //pool.submit(actuators);
+    std::string description;
+    long duration_with_cb =0;
+    long duration_without_cb =0;
+    std::stringstream str_stream;
+    std::vector<int> delays(MAX_REQUEST);
     for(size_t i = 0; i < MAX_REQUEST; i++){
-        results[i] = pool.submit(std::bind(print_task, i));
-        a_r[i] = active.submit(std::bind(print_task, i));
+        delays[i] = Generator<PROCESSING_DURATION>::instance()->generate();
     }
-    //LOG("Reactor Main ", " sending signal to ActuatorController " " thread id : ", std::this_thread::get_id(), " controller : ", actuators.getActuator_controller_id());
-    actuators.setQuit(true);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-/*     std::shared_ptr<Service> service(new ConcreteService());
+    LOG("Reactor Main entry point ", "thread id : ", std::this_thread::get_id());
+    std::shared_ptr<Service> service{new ConcreteService()};
     CircuitBreaker cb{service};
-    for(int i = 0; i < MAX_REQUEST; i++){
+    auto start_without_circuit_breaker = std::chrono::system_clock::now();
+    for(size_t i = 0; i < MAX_REQUEST; i++){
         try {
-            cb.process_request(i-5);
-            std::this_thread::sleep_for(duration_ms_t(DELAY_500_MS));
-        }
-        catch(TimeoutError &e){
-            LOG("MAIN -- Timeout ");
+            service->process_request(i, delays[i]);
+            //LOG("working ...");
         }
         catch(ServiceError &e){
-            LOG("MAIN -- Service Error :  ", e.what());
+            //LOG("MAIN -- Service Error :  ", e.what());
         }
-        catch(std::future_error &e){
-            LOG("MAIN Future Error : ", e.what());
-        }
-        
-    } */
-    for(size_t i = 0; i < MAX_REQUEST; i++){
+    }
+    auto end_without_circuit_breaker = std::chrono::system_clock::now() - start_without_circuit_breaker;
+
+    auto start_with_circuit_breaker = std::chrono::system_clock::now();
+    for(int i = 0; i < MAX_REQUEST; i++){
         try {
-            r = results[i].get();
-            LOG("MAIN:: RESULTS ",i, " : ", r );
-            r = a_r[i].get();
-            LOG("MAIN:: Active RESULTS ",i, " : ", r );
-
+            cb.process_request(i, delays[i]);
+            //std::this_thread::sleep_for(duration_ms_t(DELAY_500_MS));
+        }
+        catch(TimeoutError &e){
+            //LOG("MAIN -- Timeout ");
+        }
+        catch(ServiceError &e){
+            //LOG("MAIN -- Service Error :  ", e.what());
         }
         catch(std::future_error &e){
-            LOG("MAIN Future Results Error : ", e.what());
+            //LOG("MAIN Future Error : ", e.what());
         }
-
         
     }
-    if(actuator_thread.joinable()){
-        actuator_thread.join();
-    }
+    auto end_with_circuit_breaker = std::chrono::system_clock::now() - start_with_circuit_breaker;
+    duration_without_cb = std::chrono::duration_cast<std::chrono::milliseconds>(end_without_circuit_breaker).count();
+    duration_with_cb = std::chrono::duration_cast<std::chrono::milliseconds>(end_with_circuit_breaker).count();
+    LOG("Service called without Circuit Breaker ", "-- Duration : ", duration_without_cb, "ms");
+    LOG("Service called with Circuit Breaker ", "-- Duration : ",duration_with_cb , "ms");
+    str_stream << "Test value with " << MAX_REQUEST << " " << "requests\n";
+    str_stream << "Test run without Circuit Breaker took " << duration_without_cb << " ms\n";
+    str_stream << "Test run with Circuit Breaker took " << duration_with_cb << " ms\n";
+    //std::getline(str_stream, description);
+    description = str_stream.str();
+    Testsaver::instance()->save(delays,description);
     return 0;
 }

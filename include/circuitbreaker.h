@@ -1,5 +1,6 @@
 #ifndef CIRCUITBREAKER_H
 #define CIRCUITBREAKER_H
+#include "function_wrapper.h"
 #include "service.h"
 #include <chrono>
 #include <future>
@@ -13,7 +14,7 @@ constexpr int DEADLINE_TIME = 10;
 constexpr int FAILURE_LIMIT = 2;
 constexpr int TIMEOUT_FAILURE = 3;
 
-
+constexpr int WAIT_TIME = 10;
 typedef std::chrono::time_point<std::
 chrono::system_clock> time_point_ms_t;
 
@@ -38,12 +39,24 @@ private:
 
 class FSM{
 protected:
+    std::vector<FunctionWrapper> listeners;
+protected:
     virtual void change_state(CircuitBreaker *cbr, FSM *state);
 public:
     virtual ~FSM(){}
-    virtual int call_service(CircuitBreaker *cbr,  int request) = 0;
+    virtual int call_service(CircuitBreaker *cbr,  int request, int delay) = 0;
     virtual void trip(CircuitBreaker *cbr) = 0;
     virtual void reset(CircuitBreaker *cbr) = 0;
+    virtual void notify(){
+        if(!listeners.empty()){
+            std::for_each(listeners.begin(), listeners.end(), [&](FunctionWrapper &f){
+                f();
+            });
+        }
+    }
+    virtual void addObservers(FunctionWrapper f){
+        listeners.push_back(std::move(f));
+    }
 };
 
 class CircuitBreaker
@@ -66,11 +79,14 @@ public:
     void failure_count();
     // Service interface
 public:
-    int process_request(int request); // Client Interface: call are delegated to FSM
-    int call(int request);
+    int process_request(int request, int delay); // Client Interface: call are delegated to FSM
+    int call(int request, int delay);
     int getFailure_counter() const;
     duration_ms_t getTime_to_retry() const;
     time_point_ms_t getFailure_time() const;
+    void addOnCircuitBreakClosedObserver(FunctionWrapper observer);
+    void addOnCircuitBreakOpenObserver(FunctionWrapper observer);
+    void addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer);
 };
 
 
@@ -83,7 +99,7 @@ private:
 public:
     virtual ~CircuitBreakerOpen(){}
     static FSM *instance();
-    virtual int call_service(CircuitBreaker *cbr, int request) override;
+    virtual int call_service(CircuitBreaker *cbr, int request, int delay) override;
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
 };
@@ -98,7 +114,7 @@ private:
 public:
     virtual ~CircuitBreakerClosed(){}
     static FSM *instance();
-    virtual int call_service(CircuitBreaker *cbr, int request) override;
+    virtual int call_service(CircuitBreaker *cbr, int request, int delay) override;
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
 };
@@ -113,7 +129,7 @@ private:
 public:
     virtual ~CircuitBreakerHalfOpen(){}
     static FSM *instance();
-    virtual int call_service(CircuitBreaker *cbr, int request) override;
+    virtual int call_service(CircuitBreaker *cbr, int request, int delay) override;
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
 };

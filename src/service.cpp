@@ -1,7 +1,8 @@
 #include "service.h"
 #include <time.h>
 #include <iostream>
-
+#include <thread>
+#include <chrono>
 
 ServiceError::ServiceError():std::runtime_error("BAD REQUEST"){
     what_string = std::string("BAD REQUEST");
@@ -21,31 +22,24 @@ const char* ServiceError::what()const noexcept{
 
 
 
-ConcreteService::ConcreteService(): service_resource_usage{0}, samples(100)
+ConcreteService::ConcreteService(): duration{0}
 {
-    std::vector<int> sources_sample(200);
-    std::random_device seeder;
-    const auto seed = seeder.entropy() ? seeder() : time(nullptr);
-    std::default_random_engine gen (static_cast<std::default_random_engine::result_type>(seed));
-    std::iota(sources_sample.begin(), sources_sample.end(),1);
-    sample(sources_sample.cbegin(), sources_sample.cend(), samples.begin(),
-                100, gen);
-    std::cout << '\n';
+
 
 }
 
-int ConcreteService::process_request(int request)
+
+int ConcreteService::process_request(int request, int delay)
 {
-    service_resource_usage++;
-    int value = 0;
-    if(!((request  >= 0) && (request < samples.size()))){
-        throw ServiceError("BAD REQUEST : Index out of Bound");
+    //duration = Generator<PROCESSING_DURATION>::instance()->generate();
+    //LOG("Service DURATION : ", delay, "ms");
+    //service_resource_usage++;
+    // simulate the time required to process the request
+    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+    if(!((delay % 2) == 0)){
+        throw ServiceError("SYSTEM::ERROR: " + std::to_string(delay));
     }
-    value = samples.at(request);
-    if(!((value % 2) == 0)){
-        throw ServiceError("SYSTEM::ERROR: " + std::to_string(value));
-    }
-    return value;
+    return delay;
 }
 
 
