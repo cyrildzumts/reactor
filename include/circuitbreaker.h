@@ -2,6 +2,7 @@
 #define CIRCUITBREAKER_H
 #include "function_wrapper.h"
 #include "service.h"
+#include <optional>
 #include <chrono>
 #include <future>
 #include <memory>
@@ -14,7 +15,7 @@ constexpr int DEADLINE_TIME = 10;
 constexpr int FAILURE_LIMIT = 2;
 constexpr int TIMEOUT_FAILURE = 3;
 
-constexpr int WAIT_TIME = 10;
+constexpr int WAIT_TIME = 20;
 typedef std::chrono::time_point<std::
 chrono::system_clock> time_point_ms_t;
 
@@ -63,6 +64,7 @@ class CircuitBreaker
 {
 
 private:
+    int waiting_time;
     int failure_counter;
     time_point_ms_t failure_time;
     duration_ms_t time_to_retry;
@@ -73,7 +75,7 @@ private:
 private:
     void change_State(FSM *fsm_state);
 public:
-    CircuitBreaker(std::shared_ptr<Service> service);
+    CircuitBreaker(std::shared_ptr<Service> service, std::optional<int> wait);
     void trip(); // Open the circuit when the failure rate are reached
     void reset(); // Close the circuit and reset the failure counter
     void failure_count();
@@ -87,6 +89,8 @@ public:
     void addOnCircuitBreakClosedObserver(FunctionWrapper observer);
     void addOnCircuitBreakOpenObserver(FunctionWrapper observer);
     void addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer);
+    int getWaiting_time() const;
+    void setWaiting_time(int value);
 };
 
 

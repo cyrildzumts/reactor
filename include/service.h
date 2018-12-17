@@ -2,6 +2,7 @@
 #define SERVICE_H
 #include "generator.h"
 #include <log.h>
+#include <optional>
 #include <mutex>
 #include <exception>
 #include <random>
@@ -9,7 +10,7 @@
 #include <algorithm>
 #include <vector>
 
-#define PROCESSING_DURATION 200
+#define PROCESSING_DURATION 50
 
 class ServiceError : public std::runtime_error{
 public:
@@ -39,8 +40,9 @@ class ConcreteService : public Service{
 private:
     int service_resource_usage;
     int duration;
+    int average_duration;
 public:
-    ConcreteService();
+    ConcreteService(std::optional<int> wait_time = std::nullopt);
     ConcreteService(const int &sample_size);
     // Service interface
 public:

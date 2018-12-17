@@ -47,15 +47,25 @@ void CircuitBreaker::addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer)
     CircuitBreakerHalfOpen::instance()->addObservers(std::move(observer));
 }
 
+int CircuitBreaker::getWaiting_time() const
+{
+    return waiting_time;
+}
+
+void CircuitBreaker::setWaiting_time(int value)
+{
+    waiting_time = value;
+}
+
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
     current_state = fsm_state;
-//    if(current_state){
+//    if(current_state == CircuitBreakerClosed::instance()){
 //        current_state->notify();
 //    }
 }
 
-CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):time_to_retry{1000ms}
+CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service, std::optional<int> wait):time_to_retry{1000ms}
 {
     this->service = service;
     if(service){
@@ -65,6 +75,8 @@ CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):time_to_retry{1
         current_state = CircuitBreakerOpen::instance();
     }
     failure_counter = 0;
+    waiting_time = wait ? *wait : WAIT_TIME;
+    LOG("Circuit breaker -- waiting time : ", waiting_time, " ms.");
 }
 
 void CircuitBreaker::trip()
@@ -94,7 +106,7 @@ int CircuitBreaker::call(int request, int delay)
 {
     int ret;
     std::future<int> ret_future = std::async(&Service::process_request, service, request, delay);
-    std::future_status status = ret_future.wait_for(std::chrono::milliseconds(WAIT_TIME));
+    std::future_status status = ret_future.wait_for(std::chrono::milliseconds(waiting_time));
     if( status == std::future_status::ready){
         try {
             ret = ret_future.get();
