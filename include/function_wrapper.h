@@ -1,6 +1,22 @@
 #ifndef FUNCTION_WRAPPER_H
 #define FUNCTION_WRAPPER_H
 #include <memory>
+#include <utility> // std::invoke()
+#include <functional> //std::forward()
+#include <type_traits>
+
+template<typename Callable, typename... Args>
+decltype (auto) call_callable(Callable &&op, Args&&... args){
+    if constexpr(std::is_same_v<std::invoke_result_t<Callable, Args...>,
+                 std::invoke(std::forward<Callable>(op),std::forward<Args...>(args...))>){
+        return;
+    }
+    else {
+        //decltype (auto) ret = std::invoke(std::forward<Callable>(op),std::forward<Args...>(args...));
+        return std::invoke(std::forward<Callable>(op),std::forward<Args...>(args...));
+    }
+}
+
 
 class FunctionWrapper{
 private:
@@ -19,6 +35,7 @@ private:
             f();
         }
     };
+
 
 public:
     template<typename Func>

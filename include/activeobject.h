@@ -15,7 +15,7 @@ class AbstractActive{
 
 public:
 
-    AbstractActive(): done(false){
+    AbstractActive(): done(false), is_working(false){
         worker = std::unique_ptr<std::thread>(new std::thread(&AbstractActive::run, this));
     }
 
@@ -41,7 +41,9 @@ public:
         while(!done){
             FunctionWrapper task;
             work_queue.wait_and_pop(task);
+            is_working = true;
             task();
+            is_working = false;
             std::this_thread::yield();
         }
         LOG("ACTIVE OBJECT run terminated", "thread id : ", std::this_thread::get_id());
@@ -54,6 +56,7 @@ public:
     }
 private:
     bool done;
+    bool is_working;
     ThreadSafeQueue<FunctionWrapper> work_queue;
     std::unique_ptr<std::thread> worker;
 };
