@@ -47,17 +47,25 @@ void CircuitBreaker::addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer)
     CircuitBreakerHalfOpen::instance()->addObservers(std::move(observer));
 }
 
+int CircuitBreaker::getFailures() const
+{
+    return failures;
+}
+
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
-    current_state = fsm_state;
-    if(current_state){
+    if(fsm_state){
+        current_state = fsm_state;
         current_state->notify();
+    }
+    else{
+        LOG_WARN("Circuit Breaker : change_state() called with nullptr. Nothing done");
     }
 }
 
-CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):time_to_retry{1000ms}
+CircuitBreaker::CircuitBreaker():time_to_retry{1000ms}
 {
-    this->service = service;
+    service = std::make_shared<ConcreteService>();
     if(service){
         current_state = CircuitBreakerClosed::instance();
     }
@@ -65,12 +73,26 @@ CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):time_to_retry{1
         current_state = CircuitBreakerOpen::instance();
     }
     failure_counter = 0;
+    failures = 0;
 }
 
-CircuitBreaker::CircuitBreaker(std::unique_ptr<Service> service, duration_ms_t deadline,duration_ms_t time_to_retry, int failure_threshold):
+CircuitBreaker::CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
     failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
 {
-    serv = std::move(service);
+    service = std::make_shared<ConcreteService>();
+    current_state = CircuitBreakerClosed::instance();
+    failure_counter = 0;
+    failures = 0;
+}
+
+CircuitBreaker::~CircuitBreaker()
+{
+    LOG("Circuit Breaker Deleted");
+    if(service){
+        LOG("Unique pointer still valide");
+    }else{
+        LOG("Unique pointer invalide");
+    }
 }
 
 void CircuitBreaker::trip()
@@ -86,6 +108,7 @@ void CircuitBreaker::reset()
 void CircuitBreaker::failure_count()
 {
     failure_counter++;
+    failures++;
 }
 
 
