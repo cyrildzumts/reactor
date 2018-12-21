@@ -1,6 +1,11 @@
 #ifndef CIRCUITBREAKER_H
 #define CIRCUITBREAKER_H
 #include "function_wrapper.h"
+
+#include <utility>
+#include <functional>
+#include <type_traits>
+
 #include "service.h"
 #include <chrono>
 #include <future>
@@ -20,6 +25,7 @@ chrono::system_clock> time_point_ms_t;
 
 
 typedef  std::chrono::milliseconds duration_ms_t;
+
 
 class CircuitBreaker;
 
@@ -64,16 +70,24 @@ class CircuitBreaker
 
 private:
     int failure_counter;
+    int failure_threshold;
     time_point_ms_t failure_time;
     duration_ms_t time_to_retry;
+    duration_ms_t deadline;
     FSM *current_state;
     std::shared_ptr<Service> service;
+    std::unique_ptr<Service> serv;
     friend class FSM;
 
 private:
     void change_State(FSM *fsm_state);
 public:
+    /**
+     * @brief CircuitBreaker Construct a circuit breaker with default parameters
+     * @param service Service which  processes the request
+     */
     CircuitBreaker(std::shared_ptr<Service> service);
+    CircuitBreaker(std::unique_ptr<Service> service, duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold);
     void trip(); // Open the circuit when the failure rate are reached
     void reset(); // Close the circuit and reset the failure counter
     void failure_count();

@@ -7,11 +7,15 @@ using namespace std;
 
 int constexpr MAX_REQUEST = 5;
 
+
+
+
 int main(int argc, char const *argv[])
 {
     LOG("Reactor: Circuit Breaker ");
     std::shared_ptr<Service> service{new ConcreteService()};
     CircuitBreaker cb{service};
+
     /*
      * calling the same service through the circuit breaker
      */

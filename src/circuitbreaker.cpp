@@ -67,6 +67,12 @@ CircuitBreaker::CircuitBreaker(std::shared_ptr<Service> service):time_to_retry{1
     failure_counter = 0;
 }
 
+CircuitBreaker::CircuitBreaker(std::unique_ptr<Service> service, duration_ms_t deadline,duration_ms_t time_to_retry, int failure_threshold):
+    failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
+{
+    serv = std::move(service);
+}
+
 void CircuitBreaker::trip()
 {
 
@@ -99,9 +105,9 @@ int CircuitBreaker::call(int request, int delay)
         try {
             ret = ret_future.get();
             failure_counter = 0;
-        } catch (ServiceError &e) {
+        } catch (...) {
             failure_time = std::chrono::system_clock::now();
-            throw  e;
+            throw ;
         }
     }
     else if(status == std::future_status::timeout){
@@ -167,13 +173,13 @@ int CircuitBreakerClosed::call_service(CircuitBreaker *cbr, int request, int del
         if(cbr->getFailure_counter() > FAILURE_LIMIT){
             this->trip(cbr);
         }
-        throw e; // rethrow to inform the caller about the error.
+        throw ; // rethrow to inform the caller about the error.
     }catch(TimeoutError &t){
         cbr->failure_count();
         if(cbr->getFailure_counter() > FAILURE_LIMIT){
             this->trip(cbr);
         }
-        throw t; // rethrow to inform the caller about the error.
+        throw; // rethrow to inform the caller about the error.
     }
     return  ret;
 }
@@ -209,11 +215,11 @@ int CircuitBreakerHalfOpen::call_service(CircuitBreaker *cbr, int request, int d
     } catch (ServiceError &e) {
         cbr->failure_count();
         this->trip(cbr);
-        throw e;
+        throw ;
     }catch (TimeoutError &e) {
         cbr->failure_count();
         this->trip(cbr);
-        throw e;
+        throw ;
     }
     return  ret;
 }
