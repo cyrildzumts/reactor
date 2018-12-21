@@ -1,7 +1,6 @@
  //#define BOOST_TEST_DYN_LINK
  #define BOOST_TEST_MODULE "BaseClassModule"
 
-#include "actuators.h"
 #include <boost/test/unit_test.hpp>
 
 class TestObject{

@@ -22,7 +22,11 @@ const char* ServiceError::what()const noexcept{
 
 
 
+<<<<<<< HEAD
 ConcreteService::ConcreteService(std::optional<int> wait_time): duration{0}
+=======
+ConcreteService::ConcreteService()
+>>>>>>> trunk
 {
     average_duration = wait_time ? *wait_time : 20;
     LOG("Service component average time : ", average_duration , " ms");
@@ -32,10 +36,13 @@ ConcreteService::ConcreteService(std::optional<int> wait_time): duration{0}
 
 int ConcreteService::process_request(int request, int delay)
 {
+<<<<<<< HEAD
     //duration = Generator<20>::instance()->generate();
     int total = duration + delay;
     //LOG("Service DURATION : ", total, "ms");
     //service_resource_usage++;
+=======
+>>>>>>> trunk
     // simulate the time required to process the request
     std::this_thread::sleep_for(std::chrono::milliseconds(delay));
 //    if((total) > average_duration){
