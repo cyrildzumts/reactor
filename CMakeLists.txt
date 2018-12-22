@@ -89,9 +89,9 @@ endif()
 #set(BOOST_USE_STATIC_LIBS OFF)
 set(BOOST_USE_MULTITHREAD ON)
 #set(BOOST_USE_STATIC_RUNTIME OFF)
-find_package(Boost 1.65 COMPONENTS unit_test_framework REQUIRED)
+find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 if(Boost_FOUND)
-    message("Found Boost 1.65 on this computer")
+    message("Found Boost  on this computer")
 
     include_directories(${Boost_INCLUDE_DIRS})
 
