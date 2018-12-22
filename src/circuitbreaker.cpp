@@ -57,7 +57,9 @@ void CircuitBreaker::change_State(FSM *fsm_state)
 {
     if(fsm_state){
         current_state = fsm_state;
+#ifdef DEBUG_ON
         current_state->notify();
+#endif
     }
     else{
         LOG_WARN("Circuit Breaker : change_state() called with nullptr. Nothing done");
@@ -88,12 +90,14 @@ CircuitBreaker::CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_ret
 
 CircuitBreaker::~CircuitBreaker()
 {
+#ifdef DEBUG_ON
     LOG("Circuit Breaker Deleted");
     if(service){
         LOG("Unique pointer still valide");
     }else{
         LOG("Unique pointer invalide");
     }
+#endif
 }
 
 void CircuitBreaker::trip()
@@ -123,8 +127,8 @@ int CircuitBreaker::process_request(int request, int delay)
 int CircuitBreaker::call(int request, int delay)
 {
     int ret = -1;
-    std::future<int> ret_future = std::async(&Service::process_request, service, request, delay);
-    std::future_status status = ret_future.wait_for(std::chrono::milliseconds(waiting_time));
+    std::future<int> ret_future = std::async(std::launch::async,&Service::process_request, service, request, delay);
+    std::future_status status = ret_future.wait_for(std::chrono::milliseconds(deadline));
     if( status == std::future_status::ready){
         try {
             ret = ret_future.get();

@@ -4,173 +4,312 @@
 TestRunner::TestRunner()
 {
     LOG("TestRunner constructed ...");
+    int request = 0;
+    double avg = 0.0;
+    for(size_t i = 0; i < requests.size(); i++){
+        request = requests[i];
+        delays_list.push_back(std::vector<int>());
+        for(int j = 0; j < request; j++){
+            delays_list[i].push_back(Generator<PROCESSING_DURATION>::instance()->generate());
+        }
+        avg = std::accumulate(delays_list[i].begin(), delays_list[i].end(), 0) / static_cast<double>(request);
+        avarage.push_back(avg);
+    }
+
+    for(size_t i = 0; i < percents.size(); i++){
+        deadline_list.push_back(std::vector<int>());
+        std::for_each(avarage.begin(), avarage.end(), [&](double avg){
+            deadline_list[i].push_back(static_cast<int>(lround((avg * percents[i]))));
+            //deadline_list[i].push_back(static_cast<int>(lround((PROCESSING_DURATION * percents[i]))));
+        });
+    }
+
 }
 TestRunner::~TestRunner(){
     LOG("TestRunner destructed ...");
 }
 
-void TestRunner::run_test()
+void TestRunner::print_avg()
+{
+    LOG("AVARAGE LIST : ");
+    std::cout << "[";
+    std::for_each(avarage.begin(), avarage.end(), [](double avg){
+        std::cout << avg << " ";
+    });
+    std::cout << "]\n";
+}
+
+void TestRunner::print_delays()
+{
+    LOG("DELAYS for every request :");
+    for(size_t i = 0; i < delays_list.size(); i++){
+        print_delays(i);
+    }
+}
+
+void TestRunner::print_delays(size_t i)
+{
+    LOG("DELAYS LIST  for request = : ", requests[i]);
+    std::cout << "[ ";
+    std::for_each(delays_list[i].begin(), delays_list[i].end(), [](int delay){
+        std::cout << delay << " ";
+    });
+    std::cout << "]\n";
+}
+
+void TestRunner::print_deadline()
+{
+    LOG("DEADLINES for every percents :");
+    for(size_t i = 0; i < deadline_list.size(); i++){
+        print_deadline(i);
+    }
+}
+
+void TestRunner::print_deadline(size_t i)
+{
+    LOG("DEADLINE LIST  for percent = : ", percents[i]);
+    std::cout << "[ ";
+    std::for_each(deadline_list[i].begin(), deadline_list[i].end(), [](int deadline){
+        std::cout << deadline << " ";
+    });
+    std::cout << "]\n";
+}
+
+void TestRunner::run_test(int percent_index)
 {
 
     LOG("Running Test started ...");
-    std::for_each(percents.begin(), percents.end(), [&](double percent){
-        LOG("RUNNING TEST with percent : ", percent);
-        std::for_each(requests.begin(), requests.end(), [&](int request){
-            for(size_t i = 0; i < request; i++){
-                delays.push_back(Generator<PROCESSING_DURATION>::instance()->generate());
-            }
-            int result = std::accumulate( delays.begin(), delays.end(), 0);
+    data_t data;
+    data.deadline_list_index = percent_index;
+    long duration = 0;
 
-            double average_value = result / static_cast<double>(request);
-            average_time = static_cast<int>(average_value);
-            LOG("RUNNING TEST with percent : ", percent, " REQUEST : ", request);
-            this->run_service_test(request, percent);
-            this->run_cbreaker_test(request, percent);
-            waiting_times.push_back(average_time);
-            delays.clear();
-        });
-        LOG("RUNNING TEST with percent : ", percent, " finished.");
-        LOG("Saving TEST with percent : ", percent, " ...");
-        this->save_result(percent);
-        LOG("Saving TEST with percent : ", percent, " done !");
-    });
+
+    for(size_t i = 0; i < requests.size(); i++){
+        data.request_index = i;
+        duration = run_cbreaker_test(data);
+        LOG("Circuit Breaker Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
+            " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
+        LOG("Durarion : ", duration);
+        errors_list.at(percent_index).push_back(data.errors);
+        success_list.at(percent_index).push_back(data.success);
+        durations_list.at(percent_index).push_back(data.duration);
+    }
+
+
+
+    for(size_t i = 0; i < requests.size(); i++){
+        data.request_index = i;
+        duration = run_service_test(data);
+        LOG("ervice Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
+            " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
+        LOG("Durarion : ", duration);
+        service_errors_list.at(percent_index).push_back(data.errors);
+        service_success_list.at(percent_index).push_back(data.success);
+        service_durations_list.at(percent_index).push_back(data.duration);
+    }
+
     LOG("Running Test finished");
 }
 
-void TestRunner::run_service_test(int request, double percent)
+void TestRunner::run_test()
 {
-    int ret;
-    int success_count = 0;
-    int error_count = 0;
-    long duration = 0;
-    std::optional<int> wait_time(average_time);
-    std::unique_ptr<Service> service{new ConcreteService(wait_time)};
-    auto start = std::chrono::system_clock::now();
+    for(size_t i = 0; i < percents.size(); i++){
+        errors_list.push_back(std::vector<int>());
+        success_list.push_back(std::vector<int>());
+        durations_list.push_back(std::vector<int>());
 
+        service_errors_list.push_back(std::vector<int>());
+        service_success_list.push_back(std::vector<int>());
+        service_durations_list.push_back(std::vector<int>());
+
+        run_test(i);
+
+    }
+
+
+}
+
+long TestRunner::run_service_test(data_t &data)
+{
+    LOG("run Service test started ...");
+    int request = requests[data.request_index];
+    int deadline = deadline_list[data.deadline_list_index][data.request_index];
+    int errors = 0;
+    int success = 0;
+    long duration = 0;
+    int ret = 0;
+    std::unique_ptr<Service> service = std::make_unique<ConcreteService>();
+    auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
-            ret = service->process_request(i, delays[i]);
-            if(ret < average_time) {
-                success_count++;
+            ret = service->process_request(request, delays_list[data.request_index][i] );
+            if(ret <= deadline){
+                success++;
             }
-            else {
-                error_count++;
+            else{
+                errors++;
             }
-            //LOG("working ...");
-        }
-        catch(ServiceError &e){
-            error_count++;
-            //LOG("MAIN -- Service Error :  ", e.what());
+        } catch (...) {
+            errors++;
         }
     }
     auto end = std::chrono::system_clock::now() - start;
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end).count();
-    results_services.push_back(duration);
-    errors_services.push_back(error_count);
-    success_services.push_back(success_count);
+    data.errors = errors;
+    data.success = success;
+    data.duration = duration;
+    data.deadline = deadline;
+    data.request = request;
+    data.percent = percents[data.deadline_list_index];
+    LOG("run Service test finished ... : duration : ", data.duration, " duration 2 : ", duration);
+    return duration;
 }
 
-void TestRunner::run_cbreaker_test(int request, double percent)
+long TestRunner::run_cbreaker_test(data_t &data)
 {
-    int ret;
-    int success_count = 0;
-    int error_count = 0;
+    LOG("run cbreaker test started ...");
+    int request = requests[data.request_index];
+    int deadline = deadline_list[data.deadline_list_index][data.request_index];
+    int errors = 0;
+    int success = 0;
     long duration = 0;
-
-    int waiting_time = static_cast<int>(average_time * percent);
-    std::optional<int> wait_time(average_time);
-    std::optional<int> cb_wait_time(waiting_time);
-    std::shared_ptr<Service> service{new ConcreteService(wait_time)};
-    CircuitBreaker cb(service, cb_wait_time);
+    std::string header;
+    CircuitBreaker cb(duration_ms_t(deadline +5), duration_ms_t(100), 5 );
     auto start = std::chrono::system_clock::now();
-
     for(size_t i = 0; i < request; i++){
         try {
-            ret = cb.process_request(i, delays[i]);
-            success_count++;
-            //LOG(" Circuit Breaker working ...");
-        }
-        catch(ServiceError &e){
-            error_count++;
-            //LOG("MAIN -- Service Error :  ", e.what());
-        }
-        catch(TimeoutError &e){
-            error_count++;
-            //LOG("MAIN -- Timeout ");
+            cb.process_request(request, delays_list[data.request_index][i] );
+            success++;
+        } catch (...) {
+            errors++;
         }
     }
     auto end = std::chrono::system_clock::now() - start;
     duration = std::chrono::duration_cast<std::chrono::milliseconds>(end).count();
-    results_circuitbreaker.push_back(duration);
-    errors_cbreaker.push_back(error_count);
-    success_cbreaker.push_back(success_count);
+    data.errors = errors;
+    data.success = success;
+    data.duration = duration;
+    data.deadline = deadline;
+    data.request = request;
+    data.percent = percents[data.deadline_list_index];
+    LOG("run cbreaker test finished ... : duration : ", data.duration, " duration 2 : ", duration);
+    return duration;
 }
 
-void TestRunner::save_result(double percent)
+
+
+void TestRunner::save_result()
 {
-    std::string f = "log/result_" + std::to_string(percent) + ".m";
-    std::string description;
-    std::stringstream str_stream;
-    size_t i = 0;
-    int request = 0;
+    std::string filename = "log/circuit_breaker.txt";
     std::ios_base::openmode mode = std::fstream::app|std::fstream::in|std::fstream::out;
-    std::fstream file(f, mode);
+    std::fstream file(filename, mode);
     if(!file.is_open()){
-        LOG("TestRunner : ", " unable to open ", f);
+        LOG("TestRunner : ", " unable to open ", filename);
         exit(EXIT_FAILURE);
     }
+    LOG("Saving test results into ", filename);
+    file << "System Infos : \n"
+         << "Operating System \t: Ubuntu 18.04.1 LTS\n"
+         << "RAM              \t: 12GB\n"
+         << "PROCESSOR        \t: Intel Core i7-8550U @1.80Hz * 8\n"
+         << "GRAPHICS 1       \t: Intel UHD 620\n"
+         << "GRAPHICS 2       \t: NVidia GEFORCE 150\n"
+         << "ARCHITECTURE     \t: 64-bit\n"
+         << "DESKTOP          \t: GNOME 3.28.2\n"
+         << "DEVICE           \t: HP ENVY x360 15-bp150\n";
+    for(size_t i = 0; i < percents.size(); i++){
+        file << "TestRunner Circuit Breaker run for PERCENTAGE :  " << percents[i] * 100  << "% \n";
+        file << "--------------------------------------------------------------\n";
+        file << "REQUEST \t Durations\t Errors\t Success\t\n";
+        file << "--------------------------------------------------------------\n";
+        for(size_t j = 0; j < requests.size(); j++){
+            file << requests[j] <<"\t\t"<< durations_list[i][j] << "\t\t"
+                 << errors_list[i][j] << "\t\t" << success_list[i][j] << "\t\n";
+        }
+        file << "--------------------------------------------------------------\n";
+        file << "Summary : \n";
+        file << "request   \t= [ ";
+        std::for_each(requests.begin(), requests.end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
+        file << "durations \t= [ ";
 
-    file << "TestRunner run for PERCENTAGE :  " << percent * 100  << "% \n";
-    file << "--------------------------------------------------------------\n";
-
-    for(i = 0; i < results_services.size(); i++){
-        request = requests[i];
-        file << "TestRunner run with REQUEST = " << request << " : \n";
-        file << "Average waiting time : " << waiting_times[i] << " ms \n";
-        file << "Error count when calling the Service directly : " << errors_services[i] << " errors \n";
-        file << "Error count when calling the CBreaker directly : " << errors_cbreaker[i] << " errors \n";
-        file << "Success count when calling the Service directly : " << success_services[i] << " success \n";
-        file << "Success count when calling the CBreaker directly : " << success_cbreaker[i] << " success \n";
-        file << "###############################################################################\n";
+        std::for_each(durations_list[i].begin(), durations_list[i].end(), [&](long element){
+            file << element << " ";
+        });
+        file << " ]\n";
+        file << "errors    \t= [ ";
+        std::for_each(errors_list[i].begin(), errors_list[i].end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
+        file << "success   \t= [ ";
+        std::for_each(success_list[i].begin(), success_list[i].end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
 
     }
-    file << "Client waiting time when using the Service directly : \n";
-    file << "durations_services = [ ";
-    std::for_each(results_services.begin(), results_services.end(), [&](long value){
-        file << value << " ";
-    });
-    file << "];\n";
-    file << "Client waiting time when using the Circuit Breaker : \n";
-    file << "durations_cbreaker = [ ";
-    std::for_each(results_circuitbreaker.begin(), results_circuitbreaker.end(), [&](long value){
-        file << value << " ";
-    });
-    file << "];\n";
     file << "--------------------------------------------------------------\n";
     file.close();
-    results_circuitbreaker.clear();
-    results_services.clear();
-    errors_cbreaker.clear();
-    errors_services.clear();
-    waiting_times.clear();
-    delays.clear();
-
-    results_circuitbreaker.resize(0);
-    results_services.resize(0);
-    errors_cbreaker.resize(0);
-    errors_services.resize(0);
-    waiting_times.resize(0);
-    delays.resize(0);
-    /*
-    results_circuitbreaker = std::vector<long>();
-    results_services = std::vector<long>();
-    errors_cbreaker = std::vector<int>();
-    errors_services = std::vector<int>();
-    waiting_times = std::vector<int>();
-    */
-
+    LOG("Saving result finished ...");
 }
 
+void TestRunner::save__service_result()
+{
+    std::string filename = "log/service.txt";
+    std::ios_base::openmode mode = std::fstream::app|std::fstream::in|std::fstream::out;
+    std::fstream file(filename, mode);
+    if(!file.is_open()){
+        LOG("TestRunner : ", " unable to open ", filename);
+        exit(EXIT_FAILURE);
+    }
+    LOG("Saving Service test results into ", filename);
+    file << "System Infos : \n"
+         << "Operating System \t: Ubuntu 18.04.1 LTS\n"
+         << "RAM              \t: 12GB\n"
+         << "PROCESSOR        \t: Intel Core i7-8550U @1.80Hz * 8\n"
+         << "GRAPHICS 1       \t: Intel UHD 620\n"
+         << "GRAPHICS 2       \t: NVidia GEFORCE 150\n"
+         << "ARCHITECTURE     \t: 64-bit\n"
+         << "DESKTOP          \t: GNOME 3.28.2\n"
+         << "DEVICE           \t: HP ENVY x360 15-bp150\n";
+    for(size_t i = 0; i < percents.size(); i++){
+        file << "TestRunner Service run for PERCENTAGE :  " << percents[i] * 100  << "% \n";
+        file << "--------------------------------------------------------------\n";
+        file << "REQUEST \t Durations\t Errors\t Success\t\n";
+        file << "--------------------------------------------------------------\n";
+        for(size_t j = 0; j < requests.size(); j++){
+            file << requests[j] <<"\t\t"<< service_durations_list[i][j] << "\t\t"
+                 << service_errors_list[i][j] << "\t\t" << service_success_list[i][j] << "\t\n";
+        }
+        file << "--------------------------------------------------------------\n";
+        file << "Summary : \n";
+        file << "request   \t= [ ";
+        std::for_each(requests.begin(), requests.end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
+        file << "durations \t= [ ";
 
+        std::for_each(service_durations_list[i].begin(), service_durations_list[i].end(), [&](long element){
+            file << element << " ";
+        });
+        file << " ]\n";
+        file << "errors    \t= [ ";
+        std::for_each(service_errors_list[i].begin(), service_errors_list[i].end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
+        file << "success   \t= [ ";
+        std::for_each(service_success_list[i].begin(), service_success_list[i].end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
 
-
+    }
+    file << "--------------------------------------------------------------\n";
+    file.close();
+    LOG("Saving result finished ...");
+}

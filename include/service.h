@@ -39,14 +39,10 @@ public:
 class ConcreteService : public Service{
 private:
     int service_resource_usage;
-<<<<<<< HEAD
     int duration;
     int average_duration;
-=======
->>>>>>> trunk
 public:
     ConcreteService(std::optional<int> wait_time = std::nullopt);
-    ConcreteService(const int &sample_size);
     // Service interface
 public:
     /**
