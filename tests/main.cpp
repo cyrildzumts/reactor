@@ -27,9 +27,9 @@ public:
 
 BOOST_AUTO_TEST_CASE(countTest){
     TestObject t1;
-    BOOST_TEST(!t1.isTested());
+    BOOST_CHECK(!t1.isTested());
     t1.test();
-    BOOST_TEST(t1.isTested());
+    BOOST_CHECK(t1.isTested());
     BOOST_CHECK(t1.getCount() == 1);
 }
 
