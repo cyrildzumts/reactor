@@ -19,8 +19,8 @@ TestRunner::TestRunner()
     for(size_t i = 0; i < percents.size(); i++){
         deadline_list.push_back(std::vector<int>());
         std::for_each(avarage.begin(), avarage.end(), [&](double avg){
-            deadline_list[i].push_back(static_cast<int>(lround((avg * percents[i]))));
-            //deadline_list[i].push_back(static_cast<int>(lround((PROCESSING_DURATION * percents[i]))));
+            //deadline_list[i].push_back(static_cast<int>(lround((avg * percents[i]))));
+            deadline_list[i].push_back(static_cast<int>(lround((PROCESSING_DURATION * percents[i]))));
         });
     }
 
@@ -154,7 +154,7 @@ long TestRunner::run_service_test(data_t &data)
         }
     }
     auto end = std::chrono::system_clock::now() - start;
-    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end).count();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(end).count();
     data.errors = errors;
     data.success = success;
     data.duration = duration;
@@ -174,7 +174,7 @@ long TestRunner::run_cbreaker_test(data_t &data)
     int success = 0;
     long duration = 0;
     std::string header;
-    CircuitBreaker cb(duration_ms_t(deadline +5), duration_ms_t(100), 5 );
+    CircuitBreaker cb(duration_ms_t(deadline), duration_ms_t(100), 5 );
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
@@ -185,7 +185,7 @@ long TestRunner::run_cbreaker_test(data_t &data)
         }
     }
     auto end = std::chrono::system_clock::now() - start;
-    duration = std::chrono::duration_cast<std::chrono::milliseconds>(end).count();
+    duration = std::chrono::duration_cast<std::chrono::microseconds>(end).count();
     data.errors = errors;
     data.success = success;
     data.duration = duration;

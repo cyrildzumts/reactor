@@ -33,7 +33,7 @@ ConcreteService::ConcreteService(std::optional<int> wait_time): duration{0}
 int ConcreteService::process_request(int request, int delay)
 {
     // simulate the time required to process the request
-    std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+    std::this_thread::sleep_for(std::chrono::microseconds(delay));
 //    if(delay > average_duration){
 //        throw ServiceError("SYSTEM::ERROR: " + std::to_string(delay));
 //    }

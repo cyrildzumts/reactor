@@ -66,7 +66,7 @@ void CircuitBreaker::change_State(FSM *fsm_state)
     }
 }
 
-CircuitBreaker::CircuitBreaker():time_to_retry{1000ms}
+CircuitBreaker::CircuitBreaker():time_to_retry{1000us}
 {
     service = std::make_shared<ConcreteService>();
     if(service){
@@ -127,8 +127,19 @@ int CircuitBreaker::process_request(int request, int delay)
 int CircuitBreaker::call(int request, int delay)
 {
     int ret = -1;
+    auto start = std::chrono::system_clock::now();
     std::future<int> ret_future = std::async(std::launch::async,&Service::process_request, service, request, delay);
-    std::future_status status = ret_future.wait_for(std::chrono::milliseconds(deadline));
+    auto end = std::chrono::system_clock::now();
+    std::future_status status = ret_future.wait_for(std::chrono::microseconds(deadline));
+    //std::future_status status = ret_future.wait_for(std::chrono::microseconds(150us));
+    auto end2 = std::chrono::system_clock::now();
+    auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - end).count();
+    ret = ret_future.get();
+    LOG("CircuitBreaker::call() : async call : ", duration1, " deadline required : ", deadline.count(), " delay provided : ", delay);
+    LOG("CircuitBreaker::call() : time to get future : ", duration2, " timeout : " , status == std::future_status::timeout);
+    LOG("Future Result : ", ret);
+    exit(-1);
     if( status == std::future_status::ready){
         try {
             ret = ret_future.get();

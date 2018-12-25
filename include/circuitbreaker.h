@@ -24,7 +24,7 @@ constexpr int WAIT_TIME = 250;
 
 
 typedef std::chrono::time_point<std::chrono::system_clock> time_point_ms_t;
-typedef  std::chrono::milliseconds duration_ms_t;
+typedef  std::chrono::microseconds duration_ms_t;
 
 
 void print(int arg, int delay);
