@@ -63,16 +63,6 @@ void CircuitBreaker::setActive(const std::shared_ptr<concurrency::Active> &value
     active = value;
 }
 
-ConcreteService *CircuitBreaker::getService() const
-{
-    return service;
-}
-
-void CircuitBreaker::setService(ConcreteService *value)
-{
-    service = value;
-}
-
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
     if(fsm_state){
@@ -88,14 +78,6 @@ void CircuitBreaker::change_State(FSM *fsm_state)
 
 CircuitBreaker::CircuitBreaker():time_to_retry{1000us}
 {
-    //service = std::make_shared<ConcreteService>();
-    //service = new ConcreteService();
-//    if(service){
-//        current_state = CircuitBreakerClosed::instance();
-//    }
-//    else{
-//        current_state = CircuitBreakerOpen::instance();
-//    }
     failure_counter = 0;
     failures = 0;
 }
@@ -103,8 +85,6 @@ CircuitBreaker::CircuitBreaker():time_to_retry{1000us}
 CircuitBreaker::CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
     failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
 {
-    //service = std::make_shared<ConcreteService>();
-    //service = new ConcreteService();
     current_state = CircuitBreakerClosed::instance();
     failure_counter = 0;
     failures = 0;
@@ -149,7 +129,6 @@ int CircuitBreaker::process_request(int request, int delay)
 int CircuitBreaker::call(int request, int delay)
 {
     int ret = -1;
-    //std::future<int> async_result = std::async(std::launch::async, job, request, delay);
     std::future async_result = active->submit(job, request, delay);
     std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
     if( status == std::future_status::ready){

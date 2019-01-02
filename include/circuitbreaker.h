@@ -135,11 +135,7 @@ private:
      * @brief current_state the current circuit breaker state
      */
     FSM *current_state;
-    /**
-     * @brief service handler to the service
-     */
-    //std::shared_ptr<Service> service;
-    ConcreteService *service;
+
     std::shared_ptr<concurrency::Active> active;
     friend class FSM;
 
@@ -263,8 +259,6 @@ public:
 
     std::shared_ptr<concurrency::Active> getActive() const;
     void setActive(const std::shared_ptr<concurrency::Active> &value);
-    ConcreteService *getService() const;
-    void setService(ConcreteService *value);
 };
 
 

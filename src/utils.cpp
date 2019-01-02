@@ -173,8 +173,7 @@ long TestRunner::run_cbreaker_test(data_t &data)
     long duration = 0;
     std::string header;
     CircuitBreaker cb(duration_ms_t(deadline), duration_ms_t(100), 5 );
-    cb.setActive(active);
-    cb.setService(&service);
+    cb.setActive(active); // set the Active Object which provides a thread execution unit
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
