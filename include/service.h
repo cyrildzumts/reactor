@@ -10,7 +10,10 @@
 #include <algorithm>
 #include <vector>
 
-#define PROCESSING_DURATION 50
+#define PROCESSING_DURATION 100
+using namespace std::chrono_literals;
+
+int job(int req, int delay);
 
 class ServiceError : public std::runtime_error{
 public:
@@ -33,6 +36,7 @@ class Service
 public:
     virtual ~Service(){}
     virtual int process_request(int request,int delay = PROCESSING_DURATION) = 0;
+    virtual int operator()(int request, int delay = PROCESSING_DURATION) = 0;
 };
 
 
@@ -55,5 +59,9 @@ public:
      *
      */
     virtual int process_request(int request, int delay = PROCESSING_DURATION);
+
+    // Service interface
+public:
+    virtual int operator ()(int request, int delay = PROCESSING_DURATION) override;
 };
 #endif // SERVICE_H

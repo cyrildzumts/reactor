@@ -25,8 +25,6 @@ ConcreteService::ConcreteService(std::optional<int> wait_time): duration{0}
 
 {
     average_duration = wait_time ? *wait_time : 20;
-    LOG("Service component average time : ", average_duration , " ms");
-
 }
 
 
@@ -41,3 +39,25 @@ int ConcreteService::process_request(int request, int delay)
 }
 
 
+
+
+int ConcreteService::operator ()(int request, int delay)
+{
+    // simulate the time required to process the request
+    std::this_thread::sleep_for(std::chrono::microseconds(delay));
+    return delay;
+}
+
+int job(int req, int delay)
+{
+    /*
+     * this function sleeps to simulate a processing duration
+     */
+    if(delay < 0  | delay > PROCESSING_DURATION){
+        LOG("JOB delay ", delay, " us");
+        std::this_thread::sleep_for(std::chrono::microseconds(PROCESSING_DURATION));
+    }else {
+        std::this_thread::sleep_for(std::chrono::microseconds(delay));
+    }
+    return delay;
+}

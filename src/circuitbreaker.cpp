@@ -53,6 +53,26 @@ int CircuitBreaker::getFailures() const
     return failures;
 }
 
+std::shared_ptr<concurrency::Active> CircuitBreaker::getActive() const
+{
+    return active;
+}
+
+void CircuitBreaker::setActive(const std::shared_ptr<concurrency::Active> &value)
+{
+    active = value;
+}
+
+ConcreteService *CircuitBreaker::getService() const
+{
+    return service;
+}
+
+void CircuitBreaker::setService(ConcreteService *value)
+{
+    service = value;
+}
+
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
     if(fsm_state){
@@ -68,13 +88,14 @@ void CircuitBreaker::change_State(FSM *fsm_state)
 
 CircuitBreaker::CircuitBreaker():time_to_retry{1000us}
 {
-    service = std::make_shared<ConcreteService>();
-    if(service){
-        current_state = CircuitBreakerClosed::instance();
-    }
-    else{
-        current_state = CircuitBreakerOpen::instance();
-    }
+    //service = std::make_shared<ConcreteService>();
+    //service = new ConcreteService();
+//    if(service){
+//        current_state = CircuitBreakerClosed::instance();
+//    }
+//    else{
+//        current_state = CircuitBreakerOpen::instance();
+//    }
     failure_counter = 0;
     failures = 0;
 }
@@ -82,7 +103,8 @@ CircuitBreaker::CircuitBreaker():time_to_retry{1000us}
 CircuitBreaker::CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
     failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
 {
-    service = std::make_shared<ConcreteService>();
+    //service = std::make_shared<ConcreteService>();
+    //service = new ConcreteService();
     current_state = CircuitBreakerClosed::instance();
     failure_counter = 0;
     failures = 0;
@@ -119,7 +141,7 @@ void CircuitBreaker::failure_count()
 
 int CircuitBreaker::process_request(int request, int delay)
 {
-    int ret = -INT32_MAX;
+    int ret = 0;
     ret = current_state->call_service(this, request, delay);
     return ret;
 }
@@ -127,22 +149,12 @@ int CircuitBreaker::process_request(int request, int delay)
 int CircuitBreaker::call(int request, int delay)
 {
     int ret = -1;
-    auto start = std::chrono::system_clock::now();
-    std::future<int> ret_future = std::async(std::launch::async,&Service::process_request, service, request, delay);
-    auto end = std::chrono::system_clock::now();
-    std::future_status status = ret_future.wait_for(std::chrono::microseconds(deadline));
-    //std::future_status status = ret_future.wait_for(std::chrono::microseconds(150us));
-    auto end2 = std::chrono::system_clock::now();
-    auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-    auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(end2 - end).count();
-    ret = ret_future.get();
-    LOG("CircuitBreaker::call() : async call : ", duration1, " deadline required : ", deadline.count(), " delay provided : ", delay);
-    LOG("CircuitBreaker::call() : time to get future : ", duration2, " timeout : " , status == std::future_status::timeout);
-    LOG("Future Result : ", ret);
-    exit(-1);
+    //std::future<int> async_result = std::async(std::launch::async, job, request, delay);
+    std::future async_result = active->submit(job, request, delay);
+    std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
     if( status == std::future_status::ready){
         try {
-            ret = ret_future.get();
+            ret = async_result.get();
             failure_counter = 0;
         } catch (...) {
             failure_time = std::chrono::system_clock::now();
@@ -180,12 +192,12 @@ int CircuitBreakerOpen::call_service(CircuitBreaker *cbr, int request, int delay
 
 void CircuitBreakerOpen::trip(CircuitBreaker *cbr)
 {
-    //change_state(cbr, CircuitBreakerHalfOpen::instance());
+
 }
 
 void CircuitBreakerOpen::reset(CircuitBreaker *cbr)
 {
-    //change_state(cbr, CircuitBreakerClosed::instance());
+
 }
 
 

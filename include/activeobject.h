@@ -6,38 +6,48 @@
 #include "function_wrapper.h"
 #include "safe_queue.h"
 #include <log.h>
+#include <atomic>
 #include <future>
 #include <thread>
 
 
+namespace concurrency {
 
-class AbstractActive{
+
+class Active{
 
 public:
 
-    AbstractActive(): done(false), is_working(false){
-        worker = std::unique_ptr<std::thread>(new std::thread(&AbstractActive::run, this));
+    Active(): done(false), is_working(false){
+        worker = std::unique_ptr<std::thread>(new std::thread(&Active::run, this));
     }
 
-    ~AbstractActive(){
+    ~Active(){
+        LOG("Active object quiting ...");
+        LOG("Active object send end signal ...");
+        LOG("Active Queue size before  : ", work_queue.size());
+        //work_queue.clear();
         interrupt();
+        LOG("Active object end signal sent ...");
         if(worker->joinable()){
+            LOG("Active Object thread joinable");
+            LOG("Active Queue size : ", work_queue.size());
             worker->join();
         }
-    }
-    template<typename Func>
-    std::future<typename std::result_of<Func()>::type> submit(Func f){
-        using result_type =typename std::result_of<Func()>::type;
-        std::packaged_task<result_type()> task(std::move(f));
-        std::future<result_type> result(task.get_future());
-        LOG("ACTIVE OBJECT ", " submit()", " thread id : ", std::this_thread::get_id());
-        work_queue.push(std::move(task));
-        LOG("ACTIVE OBJECT ", " submit()", " thread id : ", std::this_thread::get_id());
-        return result;
+        LOG("Active Object quitted ...");
     }
 
+    template<typename Callable, typename... Args,typename = std::enable_if_t<std::is_move_constructible_v<Callable>>>
+        std::future<std::invoke_result_t<Callable, Args...>> submit(Callable &&op, Args&&... args){
+            using result_type =std::invoke_result_t<Callable, Args...>;
+            std::packaged_task<result_type()> task(std::bind(std::forward<Callable>(op), std::forward<Args>(args)...));
+            std::future<result_type> result(task.get_future());
+            work_queue.push(std::move(task));
+            return result;
+        }
+
     void run(){
-        LOG("ACTIVE OBJECT worker started ", "thread id : ", std::this_thread::get_id());
+        LOG("Active thread", "thread id : ", std::this_thread::get_id());
         while(!done){
             FunctionWrapper task;
             work_queue.wait_and_pop(task);
@@ -46,20 +56,25 @@ public:
             is_working = false;
             std::this_thread::yield();
         }
-        LOG("ACTIVE OBJECT run terminated", "thread id : ", std::this_thread::get_id());
+        LOG("Active object thread quitting ...", "Active thread", "thread id : ", std::this_thread::get_id());
     }
 
     void interrupt(){
-        work_queue.push([&]{
-             done = true;
-         });
+        //work_queue.clear();
+        submit([&]{
+            done = true;
+            LOG("Active Object Interrupt set", " now quitting");
+        });
+
     }
 private:
-    bool done;
+    //bool done;
+    std::atomic_bool done;
     bool is_working;
     ThreadSafeQueue<FunctionWrapper> work_queue;
     std::unique_ptr<std::thread> worker;
 };
 
+}
 
 #endif // ACTIVEOBJECT_H

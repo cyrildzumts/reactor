@@ -69,23 +69,7 @@ if(USE_LOGGER)
     option(USE_LOGGER "Use Logger Capabilities provided by Logger Lib" ON)
 endif()
 
-set( CAF_ROOT_DIR $ENV{CAF_LIB})
-if(EXISTS "${CMAKE_MODULE_PATH}/FindCAF.cmake")
-    message (STATUS "Found FindCAF.cmake in CMake directory")
-    find_package(CAF COMPONENTS core io openssl REQUIRED)
-    include(FindCAF)
-    message("CAF library PATH : ${CAF_LIBRARIES}")
-    set(${TEST_LIBS} ${TEST_LIBS} ${CAF_LIBRARIES})
-else()
-    message (FATAL_ERROR "FindCAF.cmake not found")
-endif()
-if(${CAF_FOUND})
-    set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} ${CAF_INCLUDE_DIRS})
-    include_directories(${CAF_INCLUDE_DIRS})
-    message("CAF include directory : ${CAF_INCLUDE_DIRS}")
-else()
-    message(FATAL_ERROR "CAF not found")
-endif()
+
 #set(BOOST_USE_STATIC_LIBS OFF)
 set(BOOST_USE_MULTITHREAD ON)
 #set(BOOST_USE_STATIC_RUNTIME OFF)
@@ -105,7 +89,7 @@ endif()
 
 
 add_executable (${TARGET} ${SOURCES} "src/main.cpp")
-target_link_libraries(${TARGET} ${CAF_LIBRARIES} ${Logger_LIBRARY})
+target_link_libraries(${TARGET} ${Logger_LIBRARY})
 
 
 add_executable(${TEST_TARGET} tests/main.cpp )

@@ -52,7 +52,8 @@ struct data_t{
 
 class TestRunner{
 private:
-
+    std::shared_ptr<concurrency::Active> active;
+    ConcreteService service;
     std::vector<std::vector<int>> errors_list;
     std::vector<std::vector<int>> success_list;
     std::vector<std::vector<int>> durations_list;

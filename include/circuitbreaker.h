@@ -2,12 +2,11 @@
 #define CIRCUITBREAKER_H
 
 #include "function_wrapper.h"
-
+#include "service.h"
+#include "activeobject.h"
 #include <utility>
 #include <functional>
 #include <type_traits>
-
-#include "service.h"
 #include <optional>
 #include <chrono>
 #include <future>
@@ -139,8 +138,9 @@ private:
     /**
      * @brief service handler to the service
      */
-    std::shared_ptr<Service> service;
-
+    //std::shared_ptr<Service> service;
+    ConcreteService *service;
+    std::shared_ptr<concurrency::Active> active;
     friend class FSM;
 
 private:
@@ -261,6 +261,10 @@ public:
      */
     void addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer);
 
+    std::shared_ptr<concurrency::Active> getActive() const;
+    void setActive(const std::shared_ptr<concurrency::Active> &value);
+    ConcreteService *getService() const;
+    void setService(ConcreteService *value);
 };
 
 

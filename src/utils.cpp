@@ -6,6 +6,7 @@ TestRunner::TestRunner()
     LOG("TestRunner constructed ...");
     int request = 0;
     double avg = 0.0;
+    active = std::make_shared<concurrency::Active>();
     for(size_t i = 0; i < requests.size(); i++){
         request = requests[i];
         delays_list.push_back(std::vector<int>());
@@ -77,8 +78,6 @@ void TestRunner::print_deadline(size_t i)
 
 void TestRunner::run_test(int percent_index)
 {
-
-    LOG("Running Test started ...");
     data_t data;
     data.deadline_list_index = percent_index;
     long duration = 0;
@@ -87,9 +86,9 @@ void TestRunner::run_test(int percent_index)
     for(size_t i = 0; i < requests.size(); i++){
         data.request_index = i;
         duration = run_cbreaker_test(data);
-        LOG("Circuit Breaker Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
-            " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
-        LOG("Durarion : ", duration);
+        //LOG("Circuit Breaker Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
+        //    " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
+        //LOG("Durarion : ", duration);
         errors_list.at(percent_index).push_back(data.errors);
         success_list.at(percent_index).push_back(data.success);
         durations_list.at(percent_index).push_back(data.duration);
@@ -100,19 +99,18 @@ void TestRunner::run_test(int percent_index)
     for(size_t i = 0; i < requests.size(); i++){
         data.request_index = i;
         duration = run_service_test(data);
-        LOG("ervice Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
-            " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
-        LOG("Durarion : ", duration);
+        //LOG("ervice Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
+        //    " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
+        //LOG("Durarion : ", duration);
         service_errors_list.at(percent_index).push_back(data.errors);
         service_success_list.at(percent_index).push_back(data.success);
         service_durations_list.at(percent_index).push_back(data.duration);
     }
-
-    LOG("Running Test finished");
 }
 
 void TestRunner::run_test()
 {
+    LOG("Running Test started ...");
     for(size_t i = 0; i < percents.size(); i++){
         errors_list.push_back(std::vector<int>());
         success_list.push_back(std::vector<int>());
@@ -123,7 +121,7 @@ void TestRunner::run_test()
         service_durations_list.push_back(std::vector<int>());
 
         run_test(i);
-
+        LOG("Running Test finished");
     }
 
 
@@ -131,7 +129,7 @@ void TestRunner::run_test()
 
 long TestRunner::run_service_test(data_t &data)
 {
-    LOG("run Service test started ...");
+    //LOG("run Service test started ...");
     int request = requests[data.request_index];
     int deadline = deadline_list[data.deadline_list_index][data.request_index];
     int errors = 0;
@@ -161,13 +159,13 @@ long TestRunner::run_service_test(data_t &data)
     data.deadline = deadline;
     data.request = request;
     data.percent = percents[data.deadline_list_index];
-    LOG("run Service test finished ... : duration : ", data.duration, " duration 2 : ", duration);
+    //LOG("run Service test finished ... : duration : ", data.duration, " duration 2 : ", duration);
     return duration;
 }
 
 long TestRunner::run_cbreaker_test(data_t &data)
 {
-    LOG("run cbreaker test started ...");
+    //LOG("run cbreaker test started ...");
     int request = requests[data.request_index];
     int deadline = deadline_list[data.deadline_list_index][data.request_index];
     int errors = 0;
@@ -175,10 +173,12 @@ long TestRunner::run_cbreaker_test(data_t &data)
     long duration = 0;
     std::string header;
     CircuitBreaker cb(duration_ms_t(deadline), duration_ms_t(100), 5 );
+    cb.setActive(active);
+    cb.setService(&service);
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
-            cb.process_request(request, delays_list[data.request_index][i] );
+            cb.process_request(request, delays_list.at(data.request_index).at(i) );
             success++;
         } catch (...) {
             errors++;
@@ -192,7 +192,7 @@ long TestRunner::run_cbreaker_test(data_t &data)
     data.deadline = deadline;
     data.request = request;
     data.percent = percents[data.deadline_list_index];
-    LOG("run cbreaker test finished ... : duration : ", data.duration, " duration 2 : ", duration);
+    //LOG("run cbreaker test finished ... : duration : ", data.duration);
     return duration;
 }
 

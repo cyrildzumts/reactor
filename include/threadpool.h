@@ -3,7 +3,6 @@
 
 #include "function_wrapper.h"
 #include "safe_queue.h"
-#include <log.h>
 #include <vector>
 #include <thread>
 #include <atomic>
@@ -25,7 +24,6 @@ public:
                 threads[i].join();
             }
         }
-        LOG("THREADPOOL has quitted");
     }
 };
 
@@ -60,43 +58,37 @@ public:
         }
     }
     ~ThreadPool(){
-        //Send a signal to every worker
-        for(size_t i = 0; i < workers_count; i++){
-            submit([&]{
-                done = true;
-            });
-        }
+        interrupt();
         // Wait for every worker to finish before quitting.
         std::for_each(threads.begin(), threads.end(), [&](std::thread &t){
             if(t.joinable()){
                 t.join();
             }
         });
-//        for(size_t i = 0; i< threads.size(); ++i){
-//            if(threads[i].joinable()){
-//                threads[i].join();
-//            }
-//        }
-        LOG("THREADPOOL is quitting ");
     }
     /**
      * @brief submit place the a new task in the pool to be process when
      * a worker is free.
-     * it
+     * this threadpool can process any any task with any signature.
      */
-    template<typename Func>
-    std::future<typename std::result_of<Func()>::type> submit(Func f){
-        using result_type =typename std::result_of<Func()>::type;
-        std::packaged_task<result_type()> task(std::move(f));
+    template<typename Callable, typename... Args,typename = std::enable_if_t<std::is_move_constructible_v<Callable>>>
+    std::future<std::invoke_result_t<Callable, Args...>> submit(Callable &&op, Args&&... args){
+        using result_type =std::invoke_result_t<Callable, Args...>;
+        std::packaged_task<result_type()> task(std::bind(std::forward<Callable>(op), std::forward<Args>(args)...));
         std::future<result_type> result(task.get_future());
         work_queue.push(std::move(task));
         return result;
     }
 
+
     void interrupt(){
-        work_queue.push([&]{
-             done = true;
-         });
+        std::for_each(threads.begin(), threads.end(), [&](std::thread &t){
+            if(t.joinable()){
+                submit([&]{
+                    done = true;
+                });
+            }
+        });
     }
 };
 
