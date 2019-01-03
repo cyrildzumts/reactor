@@ -162,10 +162,17 @@ int CircuitBreakerOpen::call_service(CircuitBreaker *cbr, int request, int delay
 {
     auto tmp = std::chrono::system_clock::now();
     auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - cbr->getFailure_time());
-    auto left_time = cbr->getTime_to_retry() - elapsed_time_duration;
-    if( left_time >= 0ms){
+    auto left_time = (cbr->getTime_to_retry() - elapsed_time_duration).count();
+    /*
+    if( elapsed_time_duration >= cbr->getTime_to_retry()){
         change_state(cbr, CircuitBreakerHalfOpen::instance());
     }
+    */
+
+    if( left_time <= 0){
+        change_state(cbr, CircuitBreakerHalfOpen::instance());
+    }
+
     throw  ServiceError("SYSTEM DOWN");
 }
 
