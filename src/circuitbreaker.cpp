@@ -63,23 +63,31 @@ void CircuitBreaker::setActive(const std::shared_ptr<concurrency::Active> &value
     active = value;
 }
 
+int CircuitBreaker::getUsage() const
+{
+    return usage;
+}
+
+void CircuitBreaker::updateFailures()
+{
+    ++failures;
+}
+
+int CircuitBreaker::getSuccesses() const
+{
+    return successes;
+}
+
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
     if(fsm_state){
         current_state = fsm_state;
+        /*
 #ifdef DEBUG_ON
         current_state->notify();
 #endif
+*/
     }
-    else{
-        LOG_WARN("Circuit Breaker : change_state() called with nullptr. Nothing done");
-    }
-}
-
-CircuitBreaker::CircuitBreaker():time_to_retry{1000us}
-{
-    failure_counter = 0;
-    failures = 0;
 }
 
 CircuitBreaker::CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
@@ -88,17 +96,15 @@ CircuitBreaker::CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_ret
     current_state = CircuitBreakerClosed::instance();
     failure_counter = 0;
     failures = 0;
+    successes = 0;
+    usage = 0;
 }
 
 CircuitBreaker::~CircuitBreaker()
 {
 #ifdef DEBUG_ON
-    LOG("Circuit Breaker Deleted");
-    if(service){
-        LOG("Unique pointer still valide");
-    }else{
-        LOG("Unique pointer invalide");
-    }
+    LOG("Circuit breaker - ", "usage summary :\tsuccess =\t", successes,
+        ";\terror = ", failures, ";\tusage : ",usage, ";\tdeadline(µs) :",deadline.count());
 #endif
 }
 
@@ -122,6 +128,7 @@ void CircuitBreaker::failure_count()
 int CircuitBreaker::process_request(int request, int delay)
 {
     int ret = 0;
+    ++usage;
     ret = current_state->call_service(this, request, delay);
     return ret;
 }
@@ -135,6 +142,7 @@ int CircuitBreaker::call(int request, int delay)
         try {
             ret = async_result.get();
             failure_counter = 0;
+            ++successes;
         } catch (...) {
             failure_time = std::chrono::system_clock::now();
             throw ;
@@ -161,6 +169,7 @@ FSM *CircuitBreakerOpen::instance()
 int CircuitBreakerOpen::call_service(CircuitBreaker *cbr, int request, int delay)
 {
     auto tmp = std::chrono::system_clock::now();
+    cbr->updateFailures();
     auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - cbr->getFailure_time());
     if( elapsed_time_duration >= cbr->getTime_to_retry()){
         change_state(cbr, CircuitBreakerHalfOpen::instance());
@@ -233,6 +242,7 @@ FSM *CircuitBreakerHalfOpen::instance()
 int CircuitBreakerHalfOpen::call_service(CircuitBreaker *cbr, int request, int delay)
 {
     int ret;
+
     try {
         ret = cbr->call(request, delay);
         this->reset(cbr);

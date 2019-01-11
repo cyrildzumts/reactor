@@ -1,4 +1,4 @@
-//#define DEBUG_ON
+#define DEBUG_ON 1
 #include "utils.h"
 #include <log.h> // < -- Logger library
 #include <iostream>
@@ -10,7 +10,6 @@ using namespace std;
 int main(int argc, char const *argv[])
 {
     LOG("Reactor: Circuit Breaker ");
-
     TestRunner runner;
     runner.run_test();
     runner.save_result();

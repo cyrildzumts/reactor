@@ -1,6 +1,5 @@
 #ifndef CIRCUITBREAKER_H
 #define CIRCUITBREAKER_H
-
 #include "function_wrapper.h"
 #include "service.h"
 #include "activeobject.h"
@@ -108,6 +107,12 @@ class CircuitBreaker
 private:
 
     /**
+     * @brief usage the number of call made through this circuit breaker instance.
+     * this helps when you want to monitor the circuit breaker
+     */
+    int usage;
+
+    /**
      * @brief failure_counter current failure count
      */
     int failure_counter;
@@ -115,6 +120,11 @@ private:
      * @brief failures total failures count since the programme started
      */
     int failures;
+
+    /**
+     * @brief successes number of successfuly calls
+     */
+    int successes;
     /**
      * @brief failure_threshold limit of the failure number in a row
      */
@@ -150,11 +160,6 @@ private:
 public:
 
     /**
-     * @brief CircuitBreaker Construct a circuit breaker with default parameters
-     *
-     */
-    CircuitBreaker();
-    /**
      * @brief CircuitBreaker construct the Circuit breaker with the settings provided by user.
      * @param service Service which  processes the request
      * @param deadline the time to wait for the response from the Service
@@ -162,7 +167,7 @@ public:
      * @param failure_threshold the number of allowed failures in row before transitioning from CLOSED state
      * to OPEN state.
      */
-    CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold);
+    explicit CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold);
     //CircuitBreaker(std::unique_ptr<FunctionWrapper> service, duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold);
     ~CircuitBreaker();
     /**
@@ -257,8 +262,23 @@ public:
      */
     void addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer);
 
+    /**
+     * @brief getActive accessor to the active object of this circuit breaker.
+     * @return the active object instance used by this circuit breaker
+     */
     std::shared_ptr<concurrency::Active> getActive() const;
+    /**
+     * @brief setActive set the Active Object instance which will handler the task execution
+     * @param value
+     */
     void setActive(const std::shared_ptr<concurrency::Active> &value);
+    /**
+     * @brief getUsage accessor to the usage count of this circuit breaker
+     * @return usage
+     */
+    int getUsage() const;
+    void updateFailures();
+    int getSuccesses() const;
 };
 
 
