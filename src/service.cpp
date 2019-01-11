@@ -30,11 +30,12 @@ ConcreteService::ConcreteService(std::optional<int> wait_time): duration{0}
 
 int ConcreteService::process_request(int request, int delay)
 {
+    if(delay > PROCESSING_DURATION || delay < 0){
+        throw ServiceError("Service: Bad delay argument: " + std::to_string(delay));
+    }
     // simulate the time required to process the request
     std::this_thread::sleep_for(std::chrono::microseconds(delay));
-//    if(delay > average_duration){
-//        throw ServiceError("SYSTEM::ERROR: " + std::to_string(delay));
-//    }
+
     return delay;
 }
 
@@ -53,11 +54,9 @@ int job(int req, int delay)
     /*
      * this function sleeps to simulate a processing duration
      */
-    if(delay < 0  | delay > PROCESSING_DURATION){
-        LOG("JOB delay ", delay, " us");
-        std::this_thread::sleep_for(std::chrono::microseconds(PROCESSING_DURATION));
-    }else {
-        std::this_thread::sleep_for(std::chrono::microseconds(delay));
+    if(delay > PROCESSING_DURATION || delay < 0){
+        throw ServiceError("Service: Bad delay argument:  " + std::to_string(delay));
     }
+    std::this_thread::sleep_for(std::chrono::microseconds(delay));
     return delay;
 }

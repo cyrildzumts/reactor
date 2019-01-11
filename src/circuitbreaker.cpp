@@ -162,18 +162,11 @@ int CircuitBreakerOpen::call_service(CircuitBreaker *cbr, int request, int delay
 {
     auto tmp = std::chrono::system_clock::now();
     auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - cbr->getFailure_time());
-    auto left_time = (cbr->getTime_to_retry() - elapsed_time_duration).count();
-    /*
     if( elapsed_time_duration >= cbr->getTime_to_retry()){
         change_state(cbr, CircuitBreakerHalfOpen::instance());
     }
-    */
-
-    if( left_time <= 0){
-        change_state(cbr, CircuitBreakerHalfOpen::instance());
-    }
-
     throw  ServiceError("SYSTEM DOWN");
+    return 0; // just to be conformant to the signature
 }
 
 void CircuitBreakerOpen::trip(CircuitBreaker *cbr)
@@ -205,18 +198,12 @@ int CircuitBreakerClosed::call_service(CircuitBreaker *cbr, int request, int del
     try {
         ret = cbr->call(request, delay);
         this->reset(cbr);
-    } catch (ServiceError &e) {
+    } catch (...) {
         cbr->failure_count();
         if(cbr->getFailure_counter() > FAILURE_LIMIT){
             this->trip(cbr);
         }
         throw ; // rethrow to inform the caller about the error.
-    }catch(TimeoutError &t){
-        cbr->failure_count();
-        if(cbr->getFailure_counter() > FAILURE_LIMIT){
-            this->trip(cbr);
-        }
-        throw; // rethrow to inform the caller about the error.
     }
     return  ret;
 }
@@ -249,11 +236,7 @@ int CircuitBreakerHalfOpen::call_service(CircuitBreaker *cbr, int request, int d
     try {
         ret = cbr->call(request, delay);
         this->reset(cbr);
-    } catch (ServiceError &e) {
-        cbr->failure_count();
-        this->trip(cbr);
-        throw ;
-    }catch (TimeoutError &e) {
+    } catch (...) {
         cbr->failure_count();
         this->trip(cbr);
         throw ;
