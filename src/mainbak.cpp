@@ -6,7 +6,7 @@
 using namespace std;
 int constexpr REQUEST = 100; // dummy request
 
-int main(int argc, char const *argv[])
+int _main_(int argc, char const *argv[])
 {
     std::shared_ptr<concurrency::Active> active = std::make_shared<concurrency::Active>();
     std::unique_ptr<Service> service = std::make_unique<ConcreteService>();
