@@ -15,12 +15,6 @@
 
 using namespace std::chrono_literals;
 
-constexpr int DEADLINE_TIME = 10;
-constexpr int FAILURE_LIMIT = 2;
-constexpr int TIMEOUT_FAILURE = 3;
-constexpr int WAIT_TIME = 250;
-
-
 typedef std::chrono::time_point<std::chrono::system_clock> time_point_ms_t;
 typedef  std::chrono::microseconds duration_ms_t;
 
@@ -279,6 +273,9 @@ public:
     int getUsage() const;
     void updateFailures();
     int getSuccesses() const;
+
+    int getFailure_threshold() const;
+    void setFailure_threshold(int value);
 };
 
 

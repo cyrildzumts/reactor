@@ -14,8 +14,6 @@ const char* TimeoutError::what()const noexcept{
     return "TIMEOUT";
 }
 
-
-
 int CircuitBreaker::getFailure_counter() const
 {
     return failure_counter;
@@ -78,6 +76,16 @@ int CircuitBreaker::getSuccesses() const
     return successes;
 }
 
+int CircuitBreaker::getFailure_threshold() const
+{
+    return failure_threshold;
+}
+
+void CircuitBreaker::setFailure_threshold(int value)
+{
+    failure_threshold = value;
+}
+
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
     if(fsm_state){
@@ -123,7 +131,6 @@ void CircuitBreaker::failure_count()
     failure_counter++;
     failures++;
 }
-
 
 int CircuitBreaker::process_request(int request, int delay)
 {
@@ -209,7 +216,7 @@ int CircuitBreakerClosed::call_service(CircuitBreaker *cbr, int request, int del
         this->reset(cbr);
     } catch (...) {
         cbr->failure_count();
-        if(cbr->getFailure_counter() > FAILURE_LIMIT){
+        if(cbr->getFailure_counter() > cbr->getFailure_threshold()){
             this->trip(cbr);
         }
         throw ; // rethrow to inform the caller about the error.
