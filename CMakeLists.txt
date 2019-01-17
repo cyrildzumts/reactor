@@ -22,9 +22,45 @@ else()
 endif()
 
 OPTION(DEBUG_ON "Option to activate debug output from code" OFF)
+SET(PROCESSING_DURATION CACHE STRING "Define the maximale processing time needed by the task job")
+SET(FAILURES_THRESHOLD CACHE STRING "SELECT value for the FAILURES_THRESHOLD flag")
+SET(RETRY_TIMEOUT CACHE STRING "Select the value to use for Retry when the Circuit breaker is open")
+OPTION(TIME_UNIT_MS OFF "Select the time unit to be used in the project")
+OPTION(MTHREADING OFF "Select the number of thread used by the circuit breaker" )
+set_property(CACHE PROCESSING_DURATION PROPERTY STRINGS
+    30 50 100 150 200
+    )
+set_property(CACHE FAILURES_THRESHOLD PROPERTY STRINGS
+    3 10 15
+    )
+set_property(CACHE RETRY_TIMEOUT PROPERTY STRINGS
+    10 30 100 150
+    )
+set_property(CACHE MTHREADING PROPERTY STRINGS
+    1 2 4 8 16
+    )
+
+if(TIME_UNIT_MS)
+    set(TIME_UNIT "ms")
+else()
+    set(TIME_UNIT "us")
+endif()
+set(LOG_DIR ${PROJECT_BINARY_DIR}/log)
+file(MAKE_DIRECTORY ${LOG_DIR})
 if(DEBUG_ON)
     message("Adding DEBUG_ON macro definition")
-    add_definitions(-DDEBUG_ON)
+    #add_definitions(-DDEBUG_ON)
+    #add_definitions(-DFAILURES_THRESHOLD)
+    #add_definitions(-DRETRY_TIMEOUT)
+    #add_definitions(-DTIME_UNIT_MS)
+    set(LOG_PREFIX "Circuitbreaker")
+
+    configure_file(
+        ${PROJECT_SOURCE_DIR}/include/config.h.in
+        ${PROJECT_BINARY_DIR}/config.h
+        )
+    include_directories(${PROJECT_BINARY_DIR})
+
 else()
     message("DEBUG_ON macro definition not added")
 endif(DEBUG_ON)
@@ -51,7 +87,7 @@ file (GLOB REACTOR_SOURCES "${SOURCE_DIR}/*.cpp" "${SOURCE_DIR}/include/*.h")
 file( GLOB SOURCES "src/*.cpp" "include/*.h")
 set(TEST_SOURCES ${SOURCES})
 list(REMOVE_ITEM TEST_SOURCES ${PROJECT_SOURCE_DIR}/src/main.cpp)
-
+list(REMOVE_ITEM TEST_SOURCES ${PROJECT_SOURCE_DIR}/src/mainbak.cpp)
 
 # process the CMake subdirectory
 #add_subdirectory(CMake)
@@ -98,10 +134,10 @@ add_executable (${TARGET} ${SOURCES} "src/main.cpp")
 target_link_libraries(${TARGET} ${Logger_LIBRARY})
 
 
-add_executable(${TEST_TARGET} tests/main.cpp )
+add_executable(${TEST_TARGET} ${TEST_SOURCES} tests/main.cpp )
 #target_link_libraries(${TEST_TARGET} ${TEST_LIBS})
 target_link_libraries(${TEST_TARGET} ${Logger_LIBRARY} Boost::unit_test_framework)
-#target_include_directories(${TEST_TARGET} PUBLIC ${Boost_INCLUDE_DIRS})
+target_include_directories(${TEST_TARGET} PUBLIC ${Boost_INCLUDE_DIRS})
 target_compile_definitions(${TEST_TARGET} PRIVATE "BOOST_TEST_DYN_LINK=1")
 #target_link_libraries(${TEST_TARGET} ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 add_test(NAME unit_test1 COMMAND ${TEST_TARGET})

@@ -1,4 +1,4 @@
-#define DEBUG_ON 1
+
 #include "utils.h"
 #include <log.h> // < -- Logger library
 #include <iostream>
@@ -13,6 +13,7 @@ int main(int argc, char const *argv[])
     TestRunner runner;
     runner.run_test();
     runner.save_result();
-    runner.save__service_result();
+    //runner.save__service_result();
+
     return 0;
 }

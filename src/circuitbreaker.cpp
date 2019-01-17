@@ -78,13 +78,63 @@ int CircuitBreaker::getSuccesses() const
     return successes;
 }
 
+int CircuitBreaker::getFailure_threshold() const
+{
+    return failure_threshold;
+}
+
+double CircuitBreaker::getRatio() const
+{
+    return ratio;
+}
+
+int CircuitBreaker::getFailure_threshold_reached() const
+{
+    return failure_threshold_reached;
+}
+
+double CircuitBreaker::getRatio_trip() const
+{
+    return ratio_trip;
+}
+
+void CircuitBreaker::updateRatio()
+{
+    if(usage){
+        ratio =100 * (static_cast<double>(successes)/usage);
+        ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage);
+    }
+}
+
+bool CircuitBreaker::isOpen() const
+{
+    return current_state == CircuitBreakerOpen::instance();
+}
+
+bool CircuitBreaker::isClosed() const
+{
+    return current_state == CircuitBreakerClosed::instance();
+}
+
+bool CircuitBreaker::isHalfOpen() const
+{
+    return current_state == CircuitBreakerHalfOpen::instance();
+}
+
+void CircuitBreaker::setPool(const std::shared_ptr<ThreadPool> &value)
+{
+    pool = value;
+}
+
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
     if(fsm_state){
         current_state = fsm_state;
-        /*
+
+/*
 #ifdef DEBUG_ON
-        current_state->notify();
+        if(current_state == CircuitBreakerClosed::instance())
+            current_state->notify();
 #endif
 */
     }
@@ -93,24 +143,35 @@ void CircuitBreaker::change_State(FSM *fsm_state)
 CircuitBreaker::CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
     failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
 {
+    ratio = 0.0;
+    ratio_trip = 0.0;
     current_state = CircuitBreakerClosed::instance();
     failure_counter = 0;
     failures = 0;
     successes = 0;
     usage = 0;
+    failure_threshold_reached = 0;
 }
 
 CircuitBreaker::~CircuitBreaker()
 {
+
+    if(usage){
+        ratio =100 * (static_cast<double>(successes)/usage);
+        ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage);
+    }
 #ifdef DEBUG_ON
-    LOG("Circuit breaker - ", "usage summary :\tsuccess =\t", successes,
-        ";\terror = ", failures, ";\tusage : ",usage, ";\tdeadline(µs) :",deadline.count());
+    LOG("usage summary :\tsuccess =\t", successes, ";\terror = ", failures,
+        ";\tusage : ",usage, ";\tdeadline(",TIME_UNIT,"): ",deadline.count(),
+        " Success RATIO(%):", ratio, " Number of trip :", failure_threshold_reached,
+        " Trip Ratio(%) :", ratio_trip);
 #endif
 }
 
 void CircuitBreaker::trip()
 {
-
+    ++failure_threshold_reached;
+    updateRatio();
 }
 
 void CircuitBreaker::reset()
@@ -129,6 +190,8 @@ int CircuitBreaker::process_request(int request, int delay)
 {
     int ret = 0;
     ++usage;
+    updateRatio();
+    //LOG("CB : ", current_state->getName(), "- DEADLINE : ", deadline.count(),TIME_UNIT, " - Request : ", request, " DELAY : ", delay, TIME_UNIT, " ratio :", ratio);
     ret = current_state->call_service(this, request, delay);
     return ret;
 }
@@ -136,13 +199,26 @@ int CircuitBreaker::process_request(int request, int delay)
 int CircuitBreaker::call(int request, int delay)
 {
     int ret = -1;
+    //LOG("CB call : ", current_state->getName(), "- DEADLINE : ", deadline.count(),TIME_UNIT, " - Request : ", request, " DELAY : ", delay, TIME_UNIT, " ratio :", ratio);
+#ifdef MTHREADING
+    std::future async_result = pool->submit(job, request, delay);
+#else
     std::future async_result = active->submit(job, request, delay);
-    std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
+#endif
+
+
+    //std::chrono::system_clock::time_point elapsed
+    //            = std::chrono::system_clock::now();
+    std::future_status status = async_result.wait_for(deadline);
+    //auto t_now = std::chrono::system_clock::now();
+    //auto duration =std::chrono::duration_cast<std::chrono::milliseconds>( t_now - elapsed);
+    //auto duration =std::chrono::duration_cast<duration_ms_t>( t_now - elapsed);
     if( status == std::future_status::ready){
         try {
             ret = async_result.get();
             failure_counter = 0;
             ++successes;
+            updateRatio();
         } catch (...) {
             failure_time = std::chrono::system_clock::now();
             throw ;
@@ -150,6 +226,7 @@ int CircuitBreaker::call(int request, int delay)
     }
     else if(status == std::future_status::timeout){
         failure_time = std::chrono::system_clock::now();
+        //LOG("TIMEOUT DEADLINE : ", deadline.count(), " Delay : ", delay, " - Duration : ", duration.count(), " MAX PROCESSING : ", PROCESSING_DURATION, TIME_UNIT);
         throw  TimeoutError();
     }
     return ret;
@@ -170,6 +247,7 @@ int CircuitBreakerOpen::call_service(CircuitBreaker *cbr, int request, int delay
 {
     auto tmp = std::chrono::system_clock::now();
     cbr->updateFailures();
+    cbr->trip();
     auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - cbr->getFailure_time());
     if( elapsed_time_duration >= cbr->getTime_to_retry()){
         change_state(cbr, CircuitBreakerHalfOpen::instance());
@@ -188,6 +266,11 @@ void CircuitBreakerOpen::reset(CircuitBreaker *cbr)
 
 }
 
+const std::string CircuitBreakerOpen::getName()
+{
+    return "Open";
+}
+
 
 
 FSM *CircuitBreakerClosed::instance()
@@ -204,12 +287,13 @@ FSM *CircuitBreakerClosed::instance()
 int CircuitBreakerClosed::call_service(CircuitBreaker *cbr, int request, int delay)
 {
     int ret;
+    //LOG("CB STATE : ", this->getName(), " - Request : ", request, " DELAY : ", delay, TIME_UNIT, " ratio :", cbr->getRatio());
     try {
         ret = cbr->call(request, delay);
         this->reset(cbr);
     } catch (...) {
         cbr->failure_count();
-        if(cbr->getFailure_counter() > FAILURE_LIMIT){
+        if(cbr->getFailure_counter() > cbr->getFailure_threshold()){
             this->trip(cbr);
         }
         throw ; // rethrow to inform the caller about the error.
@@ -226,6 +310,11 @@ void CircuitBreakerClosed::trip(CircuitBreaker *cbr)
 void CircuitBreakerClosed::reset(CircuitBreaker *cbr)
 {
     cbr->reset();
+}
+
+const std::string CircuitBreakerClosed::getName()
+{
+    return "Closed";
 }
 
 FSM *CircuitBreakerHalfOpen::instance()
@@ -264,6 +353,11 @@ void CircuitBreakerHalfOpen::reset(CircuitBreaker *cbr)
 {
     cbr->reset();
     change_state(cbr, CircuitBreakerClosed::instance());
+}
+
+const std::string CircuitBreakerHalfOpen::getName()
+{
+    return "Half Open";
 }
 
 void FSM::change_state(CircuitBreaker *cbr, FSM *state)

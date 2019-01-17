@@ -12,8 +12,9 @@ private:
 
 
     Generator(){
-        //gen = new std::mt19937(std::random_device()());
+
         gen = new std::mt19937(0);
+        //gen = new std::mt19937(std::random_device()());
         distribution = std::uniform_int_distribution(1, LIMIT);
     }
 public:

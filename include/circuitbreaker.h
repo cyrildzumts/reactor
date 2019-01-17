@@ -1,8 +1,10 @@
 #ifndef CIRCUITBREAKER_H
 #define CIRCUITBREAKER_H
+#include "common.h"
 #include "function_wrapper.h"
 #include "service.h"
 #include "activeobject.h"
+#include <threadpool.h>
 #include <utility>
 #include <functional>
 #include <type_traits>
@@ -13,24 +15,10 @@
 #include <log.h> // my own developped Logger
 
 
-using namespace std::chrono_literals;
-
-constexpr int DEADLINE_TIME = 10;
-constexpr int FAILURE_LIMIT = 2;
-constexpr int TIMEOUT_FAILURE = 3;
-constexpr int WAIT_TIME = 250;
-
-
-typedef std::chrono::time_point<std::chrono::system_clock> time_point_ms_t;
-typedef  std::chrono::microseconds duration_ms_t;
-
-
 void print(int arg, int delay);
 
 
 class CircuitBreaker;
-
-
 
 /**
  * @brief The TimeoutError class An Exception thrown when the Service
@@ -99,12 +87,17 @@ public:
     virtual void addObservers(FunctionWrapper f){
         listeners.push_back(std::move(f));
     }
+
+    virtual const std::string getName() = 0;
 };
 
 class CircuitBreaker
 {
 
 private:
+    double ratio;
+    double ratio_trip;
+    int failure_threshold_reached;
 
     /**
      * @brief usage the number of call made through this circuit breaker instance.
@@ -147,6 +140,7 @@ private:
     FSM *current_state;
 
     std::shared_ptr<concurrency::Active> active;
+    std::shared_ptr<ThreadPool> pool;
     friend class FSM;
 
 private:
@@ -279,6 +273,15 @@ public:
     int getUsage() const;
     void updateFailures();
     int getSuccesses() const;
+    int getFailure_threshold() const;
+    double getRatio() const;
+    int getFailure_threshold_reached() const;
+    double getRatio_trip() const;
+    void updateRatio();
+    bool isOpen() const;
+    bool isClosed()const;
+    bool isHalfOpen() const;
+    void setPool(const std::shared_ptr<ThreadPool> &value);
 };
 
 
@@ -294,6 +297,7 @@ public:
     virtual int call_service(CircuitBreaker *cbr, int request, int delay) override;
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
+    virtual const std::string getName();
 };
 
 class CircuitBreakerClosed : public FSM{
@@ -309,6 +313,7 @@ public:
     virtual int call_service(CircuitBreaker *cbr, int request, int delay) override;
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
+    virtual const std::string getName();
 };
 
 
@@ -324,5 +329,6 @@ public:
     virtual int call_service(CircuitBreaker *cbr, int request, int delay) override;
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
+    virtual const std::string getName();
 };
 #endif // CIRCUITBREAKER_H

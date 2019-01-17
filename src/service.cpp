@@ -21,20 +21,22 @@ const char* ServiceError::what()const noexcept{
 }
 
 
-ConcreteService::ConcreteService(std::optional<int> wait_time): duration{0}
+ConcreteService::ConcreteService()
 
 {
-    average_duration = wait_time ? *wait_time : 20;
+   service_resource_usage = 0;
 }
 
 
 int ConcreteService::process_request(int request, int delay)
 {
+
     if(delay > PROCESSING_DURATION || delay < 0){
+        LOG("Service DELAY ", delay);
         throw ServiceError("Service: Bad delay argument: " + std::to_string(delay));
     }
     // simulate the time required to process the request
-    std::this_thread::sleep_for(std::chrono::microseconds(delay));
+    std::this_thread::sleep_for(duration_ms_t(delay));
 
     return delay;
 }
@@ -45,7 +47,7 @@ int ConcreteService::process_request(int request, int delay)
 int ConcreteService::operator ()(int request, int delay)
 {
     // simulate the time required to process the request
-    std::this_thread::sleep_for(std::chrono::microseconds(delay));
+    std::this_thread::sleep_for(duration_ms_t(delay));
     return delay;
 }
 
@@ -54,9 +56,11 @@ int job(int req, int delay)
     /*
      * this function sleeps to simulate a processing duration
      */
-    if(delay > PROCESSING_DURATION || delay < 0){
+
+    if(delay > PROCESSING_DURATION || delay < 0 ){
         throw ServiceError("Service: Bad delay argument:  " + std::to_string(delay));
     }
-    std::this_thread::sleep_for(std::chrono::microseconds(delay));
-    return delay;
+   //std::cout <<"Job Request : " << req<< " - delay :" << delay << TIME_UNIT <<std::endl;
+    std::this_thread::sleep_for(duration_ms_t(delay));
+    return delay + req;
 }

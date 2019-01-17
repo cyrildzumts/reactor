@@ -1,6 +1,7 @@
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
 
+#include "common.h"
 #include "function_wrapper.h"
 #include "safe_queue.h"
 #include <vector>
@@ -46,8 +47,14 @@ private:
 
 public:
     ThreadPool(): done{false}{
+#ifdef MTHREADING
+        workers_count = MTHREADING;
+        LOG("Threadpool - Multithreading : ", MTHREADING);
+#else
         workers_count = std::thread::hardware_concurrency();
-        //workers_count = 4;
+
+#endif
+
         try {
             for(unsigned i = 0; i < workers_count; ++i){
                 threads.push_back(std::thread(&ThreadPool::run, this));

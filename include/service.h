@@ -1,5 +1,8 @@
-﻿#ifndef SERVICE_H
+﻿
+#ifndef SERVICE_H
 #define SERVICE_H
+
+#include "common.h"
 #include "generator.h"
 #include <log.h>
 #include <optional>
@@ -10,8 +13,7 @@
 #include <algorithm>
 #include <vector>
 
-#define PROCESSING_DURATION 100
-using namespace std::chrono_literals;
+
 
 int job(int req, int delay);
 
@@ -43,10 +45,8 @@ public:
 class ConcreteService : public Service{
 private:
     int service_resource_usage;
-    int duration;
-    int average_duration;
 public:
-    ConcreteService(std::optional<int> wait_time = std::nullopt);
+    ConcreteService();
     // Service interface
 public:
     /**
