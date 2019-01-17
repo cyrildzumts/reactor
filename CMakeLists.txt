@@ -111,6 +111,10 @@ if(USE_LOGGER)
     option(USE_LOGGER "Use Logger Capabilities provided by Logger Lib" ON)
 endif()
 
+#add libcurl
+set(CURL_LIBRARY "-lcurl")
+find_package(CURL REQUIRED)
+include_directories(${CURL_INCLUDE_DIR})
 
 #set(BOOST_USE_STATIC_LIBS OFF)
 set(BOOST_USE_MULTITHREAD ON)
@@ -131,7 +135,7 @@ endif()
 
 
 add_executable (${TARGET} ${SOURCES} "src/main.cpp")
-target_link_libraries(${TARGET} ${Logger_LIBRARY})
+target_link_libraries(${TARGET} ${CURL_LIBRARIES} ${Logger_LIBRARY})
 
 
 add_executable(${TEST_TARGET} ${TEST_SOURCES} tests/main.cpp )

@@ -5,6 +5,7 @@ FSM *CircuitBreakerClosed::root = nullptr;
 FSM *CircuitBreakerOpen::root = nullptr;
 FSM *CircuitBreakerHalfOpen::root = nullptr;
 
+static Http htpp;
 
 TimeoutError::TimeoutError():std::runtime_error("TIMEOUT"){
     //what_string = std::string("TIMEOUT REACHED");
@@ -206,13 +207,8 @@ int CircuitBreaker::call(int request, int delay)
     std::future async_result = active->submit(job, request, delay);
 #endif
 
-
-    //std::chrono::system_clock::time_point elapsed
-    //            = std::chrono::system_clock::now();
     std::future_status status = async_result.wait_for(deadline);
-    //auto t_now = std::chrono::system_clock::now();
-    //auto duration =std::chrono::duration_cast<std::chrono::milliseconds>( t_now - elapsed);
-    //auto duration =std::chrono::duration_cast<duration_ms_t>( t_now - elapsed);
+
     if( status == std::future_status::ready){
         try {
             ret = async_result.get();
