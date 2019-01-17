@@ -236,7 +236,15 @@ public:
 
     std::future<result_type> execute(Args&&... args) {
         ++usage;
-        return current_state->call(this, std::forward<Args>(args)...);
+        std::promise<result_type> p;
+        std::future<result_type> res_fut;
+        try{
+            res_fut = current_state->call(this, std::forward<Args>(args)...);
+        }catch(...){
+            p.set_exception(std::make_exception_ptr(std::current_exception()));
+            res_fut = p.get_future();
+        }
+        return res_fut;
     }
     /**
      * @brief call helper method used internally by the State Machine. it delagate the request to the Service.
@@ -261,14 +269,13 @@ public:
             } catch (const ServiceError &e) {
                 result_not_ready.set_exception(std::make_exception_ptr(e));
                 failure_time = std::chrono::system_clock::now();
-                result = result_not_ready.get_future();
+                throw;
             }
         }
         else if(status == std::future_status::timeout){
             failure_time = std::chrono::system_clock::now();
             result_not_ready.set_exception(std::make_exception_ptr(breaker::TimeoutError()));
-            result = result_not_ready.get_future();
-            //throw  breaker::TimeoutError("Timeout for deadline :  " + std::to_string(deadline.count()));
+            throw  breaker::TimeoutError("Timeout for deadline :  " + std::to_string(deadline.count()));
 
         }
         return result;
@@ -474,6 +481,7 @@ public:
             std::promise<result_type> err_promise;
             err_promise.set_exception(std::current_exception());
             ret = err_promise.get_future();
+            throw;
         }
         return  ret;
     }
