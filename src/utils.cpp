@@ -183,6 +183,7 @@ long TestRunner::run_cbreaker_test(data_t &data)
     long duration = 0;
     int failures_threshold = 0;
     int retry_time = 0;
+    CURLcode code;
 #ifdef FAILURES_THRESHOLD
     failures_threshold = FAILURES_THRESHOLD;
 #else
@@ -203,7 +204,13 @@ long TestRunner::run_cbreaker_test(data_t &data)
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
-            cb.process_request(request, delays_list.at(data.request_index).at(i) );
+            //cb.process_request(request, delays_list.at(data.request_index).at(i) );
+            code = cb.fetch_sumbit(URL_3);
+//            if(code == CURLE_OK){
+//                LOG("Fetch OK");
+//            }else{
+//                LOG("Fetch Not OK");
+//            }
             success++;
         } catch (...) {
             errors++;

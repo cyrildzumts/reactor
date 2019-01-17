@@ -115,6 +115,8 @@ endif()
 set(CURL_LIBRARY "-lcurl")
 find_package(CURL REQUIRED)
 include_directories(${CURL_INCLUDE_DIR})
+message("CULR lib : ${CURL_LIBRARIES}")
+
 
 #set(BOOST_USE_STATIC_LIBS OFF)
 set(BOOST_USE_MULTITHREAD ON)
@@ -135,12 +137,12 @@ endif()
 
 
 add_executable (${TARGET} ${SOURCES} "src/main.cpp")
-target_link_libraries(${TARGET} ${CURL_LIBRARIES} ${Logger_LIBRARY})
+target_link_libraries(${TARGET} ${Logger_LIBRARY} ${CURL_LIBRARIES})
 
 
 add_executable(${TEST_TARGET} ${TEST_SOURCES} tests/main.cpp )
 #target_link_libraries(${TEST_TARGET} ${TEST_LIBS})
-target_link_libraries(${TEST_TARGET} ${Logger_LIBRARY} Boost::unit_test_framework)
+target_link_libraries(${TEST_TARGET} ${CURL_LIBRARIES} ${Logger_LIBRARY} Boost::unit_test_framework)
 target_include_directories(${TEST_TARGET} PUBLIC ${Boost_INCLUDE_DIRS})
 target_compile_definitions(${TEST_TARGET} PRIVATE "BOOST_TEST_DYN_LINK=1")
 #target_link_libraries(${TEST_TARGET} ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})

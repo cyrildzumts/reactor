@@ -104,8 +104,9 @@ public:
     Http();
     Http(const std::string &url);
     ~Http();
+    static Http* intance();
     CURLcode fetch(const std::string &url);
-    CURLcode fetch();
+    CURLcode fetch_default();
     std::string curl_version() const;
     template<typename T,typename U,
              typename=std::enable_if_t<std::is_same_v<CURLoption,T>>,
@@ -122,7 +123,12 @@ public:
 
     }
 
+
     void install_write_callback();
 
 };
+
+void http_init();
+
+CURLcode http_job(const std::string &url);
 #endif // SERVICE_H

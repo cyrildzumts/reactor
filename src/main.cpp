@@ -10,6 +10,9 @@ using namespace std;
 int main(int argc, char const *argv[])
 {
     LOG("Reactor: Circuit Breaker ");
+
+
+
     TestRunner runner;
     runner.run_test();
     runner.save_result();

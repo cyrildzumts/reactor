@@ -5,7 +5,7 @@ FSM *CircuitBreakerClosed::root = nullptr;
 FSM *CircuitBreakerOpen::root = nullptr;
 FSM *CircuitBreakerHalfOpen::root = nullptr;
 
-static Http htpp;
+
 
 TimeoutError::TimeoutError():std::runtime_error("TIMEOUT"){
     //what_string = std::string("TIMEOUT REACHED");
@@ -127,6 +127,48 @@ void CircuitBreaker::setPool(const std::shared_ptr<ThreadPool> &value)
     pool = value;
 }
 
+CURLcode CircuitBreaker::fetch_sumbit(const std::string &url)
+{
+    CURLcode code;
+    ++usage;
+    updateRatio();
+    //LOG("CB : ", current_state->getName(), "- DEADLINE : ", deadline.count(),TIME_UNIT, " - Request : ", request, " DELAY : ", delay, TIME_UNIT, " ratio :", ratio);
+    code = current_state->fetch(this, url);
+    return code;
+}
+
+CURLcode CircuitBreaker::fetch(const std::string &url)
+{
+    CURLcode code;
+    //LOG("CB call : ", current_state->getName(), "- DEADLINE : ", deadline.count(),TIME_UNIT, " - Request : ", request, " DELAY : ", delay, TIME_UNIT, " ratio :", ratio);
+#ifdef MTHREADING
+    std::future<CURLcode> async_result = pool->submit(http_job, url);
+#else
+    std::future<CURLcode> async_result = active->submit(http_job, url);
+#endif
+
+    std::future_status status = async_result.wait_for(deadline);
+
+    if( status == std::future_status::ready){
+        try {
+            code = async_result.get();
+            failure_counter = 0;
+            ++successes;
+            updateRatio();
+        } catch (...) {
+            failure_time = std::chrono::system_clock::now();
+            throw ;
+        }
+    }
+    else if(status == std::future_status::timeout){
+        failure_time = std::chrono::system_clock::now();
+        //LOG("TIMEOUT DEADLINE : ", deadline.count(), " Delay : ", delay, " - Duration : ", duration.count(), " MAX PROCESSING : ", PROCESSING_DURATION, TIME_UNIT);
+        throw  TimeoutError();
+    }
+    return code;
+}
+
+
 void CircuitBreaker::change_State(FSM *fsm_state)
 {
     if(fsm_state){
@@ -202,9 +244,9 @@ int CircuitBreaker::call(int request, int delay)
     int ret = -1;
     //LOG("CB call : ", current_state->getName(), "- DEADLINE : ", deadline.count(),TIME_UNIT, " - Request : ", request, " DELAY : ", delay, TIME_UNIT, " ratio :", ratio);
 #ifdef MTHREADING
-    std::future async_result = pool->submit(job, request, delay);
+    std::future<int> async_result = pool->submit(job, request, delay);
 #else
-    std::future async_result = active->submit(job, request, delay);
+    std::future<int> async_result = active->submit(job, request, delay);
 #endif
 
     std::future_status status = async_result.wait_for(deadline);
@@ -267,6 +309,19 @@ const std::string CircuitBreakerOpen::getName()
     return "Open";
 }
 
+CURLcode CircuitBreakerOpen::fetch(CircuitBreaker *cbr, const std::string &url)
+{
+    auto tmp = std::chrono::system_clock::now();
+    cbr->updateFailures();
+    cbr->trip();
+    auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - cbr->getFailure_time());
+    if( elapsed_time_duration >= cbr->getTime_to_retry()){
+        change_state(cbr, CircuitBreakerHalfOpen::instance());
+    }
+    throw  ServiceError("SYSTEM DOWN");
+    return CURLE_COULDNT_CONNECT;
+}
+
 
 
 FSM *CircuitBreakerClosed::instance()
@@ -313,6 +368,23 @@ const std::string CircuitBreakerClosed::getName()
     return "Closed";
 }
 
+CURLcode CircuitBreakerClosed::fetch(CircuitBreaker *cbr, const std::string &url)
+{
+    CURLcode code;
+    //LOG("CB STATE : ", this->getName(), " - Request : ", request, " DELAY : ", delay, TIME_UNIT, " ratio :", cbr->getRatio());
+    try {
+        code = cbr->fetch(url);
+        this->reset(cbr);
+    } catch (...) {
+        cbr->failure_count();
+        if(cbr->getFailure_counter() > cbr->getFailure_threshold()){
+            this->trip(cbr);
+        }
+        throw ; // rethrow to inform the caller about the error.
+    }
+    return  code;
+}
+
 FSM *CircuitBreakerHalfOpen::instance()
 {
     if(!root){
@@ -356,7 +428,23 @@ const std::string CircuitBreakerHalfOpen::getName()
     return "Half Open";
 }
 
+CURLcode CircuitBreakerHalfOpen::fetch(CircuitBreaker *cbr, const std::string &url)
+{
+    CURLcode code;
+
+    try {
+        code = cbr->fetch(url);
+        this->reset(cbr);
+    } catch (...) {
+        cbr->failure_count();
+        this->trip(cbr);
+        throw ;
+    }
+    return  code;
+}
+
 void FSM::change_state(CircuitBreaker *cbr, FSM *state)
 {
     cbr->change_State(state);
 }
+

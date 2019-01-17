@@ -4,6 +4,7 @@
 #include <thread>
 #include <chrono>
 
+
 ServiceError::ServiceError():std::runtime_error("BAD REQUEST"){
     what_string = std::string("BAD REQUEST");
 }
@@ -67,8 +68,8 @@ int job(int req, int delay)
 
 Http::Http()
 {
-    buffer.data = new char;
-    buffer.size = 0;
+    buffer.data = static_cast<char*>(malloc(1));
+    buffer.size =0;
     curl_global_init(CURL_GLOBAL_ALL);
     curl = curl_easy_init();
     info = curl_version_info(CURLVERSION_NOW);
@@ -76,7 +77,13 @@ Http::Http()
     setOption(CURLOPT_WRITEDATA, static_cast<void*>(&buffer));
     setOption(CURLOPT_WRITEFUNCTION, write_callback);
     setOption(CURLOPT_USERAGENT, "circuit-breaker-agent/1.0");
-
+    if(curl){
+        LOG("Http object initialized");
+    }
+    else {
+        LOG("Error : Http curl not initialuzed");
+        exit(EXIT_FAILURE);
+    }
 }
 
 Http::Http(const std::string &url):Http()
@@ -97,14 +104,27 @@ Http::~Http()
 
 CURLcode Http::fetch(const std::string &url)
 {
-    CURLcode code;
+    CURLcode code = CURLE_CHUNK_FAILED;
+    curl = curl_easy_init();
+    curl = curl_easy_init();
+    info = curl_version_info(CURLVERSION_NOW);
+    setOption(CURLOPT_FOLLOWLOCATION, 1L);
+    setOption(CURLOPT_WRITEDATA, static_cast<void*>(&buffer));
+    setOption(CURLOPT_WRITEFUNCTION, write_callback);
+    setOption(CURLOPT_USERAGENT, "circuit-breaker-agent/1.0");
     if(curl && !url.empty()){
         curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+        //LOG("CURL URL : ", url);
         code = curl_easy_perform(curl);
-        std::cout <<" Received " << buffer.size << " bytes\n";
+        if(code == CURLE_FAILED_INIT){
+            LOG("CHECK CURL init: curl init failed");
+            exit(EXIT_FAILURE);
+        }
+        LOG("CURL - Received ", buffer.size, " bytes");
+        //std::cout <<" Received " << buffer.size << " bytes\n";
         //std::cout << "Received Data : \n" << buffer.data << std::endl;
         free(buffer.data);
-        buffer.data = new char;
+        buffer.data = static_cast<char*>(malloc(1));
         buffer.size =0;
 
     }
@@ -112,7 +132,7 @@ CURLcode Http::fetch(const std::string &url)
     return code;
 }
 
-CURLcode Http::fetch()
+CURLcode Http::fetch_default()
 {
     return fetch(url);
 }
@@ -120,6 +140,18 @@ CURLcode Http::fetch()
 std::string Http::curl_version() const
 {
     return std::string(info->version);
+}
+
+Http* Http::intance(){
+    static Http _instance = Http();
+    return &_instance;
+}
+
+
+CURLcode http_job(const std::string &url)
+{
+
+    return Http::intance()->fetch(url);
 }
 
 void Http::install_write_callback()
@@ -138,7 +170,6 @@ size_t write_callback(char *contents, size_t size, size_t nmemb, void *userdata)
         std::cout << "Out of memory : realloc returned null" << std::endl;
         return 0;
     }
-
     dptr->data = ptr;
     memcpy(&(dptr->data[dptr->size]), contents, real_size);
     dptr->size += real_size;

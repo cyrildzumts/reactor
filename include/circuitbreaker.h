@@ -49,6 +49,9 @@ protected:
     virtual void change_state(CircuitBreaker *cbr, FSM *state);
 public:
     virtual ~FSM(){}
+
+    virtual CURLcode fetch(CircuitBreaker *cbr, const std::string &url) = 0;
+
     /**
      * @brief call_service this method executes the right operations depending the circuit breaker
      * current state
@@ -142,6 +145,11 @@ private:
     std::shared_ptr<concurrency::Active> active;
     std::shared_ptr<ThreadPool> pool;
     friend class FSM;
+    // private interface
+private:
+    template<typename Callable, typename... Args>
+    std::future<std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>>
+    execute_intern(Callable &&op, Args&&... args);
 
 private:
     /**
@@ -192,6 +200,13 @@ public:
      * rethrown by this method. So this method should be used in a try-catch block.
      */
     int process_request(int request, int delay = PROCESSING_DURATION); // Client Interface: call are delegated to FSM
+
+
+    template<typename Callable, typename... Args>
+    std::future<std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>>
+    execute(Callable &&op, Args&&... args);
+
+
 
     /**
      * @brief call helper method used internally by the State Machine. it delagate the request to the Service.
@@ -282,6 +297,9 @@ public:
     bool isClosed()const;
     bool isHalfOpen() const;
     void setPool(const std::shared_ptr<ThreadPool> &value);
+    CURLcode fetch(const std::string &url);
+    CURLcode fetch_sumbit(const std::string &url);
+
 };
 
 
@@ -298,7 +316,9 @@ public:
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
     virtual const std::string getName();
+    virtual CURLcode fetch(CircuitBreaker *cbr, const std::string &url);
 };
+
 
 class CircuitBreakerClosed : public FSM{
 
@@ -314,6 +334,7 @@ public:
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
     virtual const std::string getName();
+    virtual CURLcode fetch(CircuitBreaker *cbr, const std::string &url);
 };
 
 
@@ -330,5 +351,7 @@ public:
     virtual void trip(CircuitBreaker *cbr) override;
     virtual void reset(CircuitBreaker *cbr) override;
     virtual const std::string getName();
+    virtual CURLcode fetch(CircuitBreaker *cbr, const std::string &url);
 };
+
 #endif // CIRCUITBREAKER_H
