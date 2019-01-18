@@ -102,6 +102,21 @@ private:
 
 public:
     Http();
+    Http(const Http &h){
+        LOG("Http copied");
+    }
+    Http(Http &&h){
+        LOG("Http Moved");
+    }
+
+    Http &operator()(const Http &other){
+        LOG("Http cpoied");
+        return *this;
+    }
+    Http &operator()(Http &&other){
+        LOG("Http moved operator");
+        return *this;
+    }
     Http(const std::string &url);
     ~Http();
     static Http* intance();

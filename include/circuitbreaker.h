@@ -101,7 +101,6 @@ private:
     double ratio;
     double ratio_trip;
     int failure_threshold_reached;
-
     /**
      * @brief usage the number of call made through this circuit breaker instance.
      * this helps when you want to monitor the circuit breaker

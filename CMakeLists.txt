@@ -27,6 +27,8 @@ SET(FAILURES_THRESHOLD CACHE STRING "SELECT value for the FAILURES_THRESHOLD fla
 SET(RETRY_TIMEOUT CACHE STRING "Select the value to use for Retry when the Circuit breaker is open")
 OPTION(TIME_UNIT_MS OFF "Select the time unit to be used in the project")
 OPTION(MTHREADING OFF "Select the number of thread used by the circuit breaker" )
+OPTION(USE_REMOTE_SERVICE ON "Select the number of thread used by the circuit breaker" )
+
 set_property(CACHE PROCESSING_DURATION PROPERTY STRINGS
     30 50 100 150 200
     )

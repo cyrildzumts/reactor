@@ -143,7 +143,9 @@ CURLcode CircuitBreaker::fetch(const std::string &url)
     //LOG("CB call : ", current_state->getName(), "- DEADLINE : ", deadline.count(),TIME_UNIT, " - Request : ", request, " DELAY : ", delay, TIME_UNIT, " ratio :", ratio);
 #ifdef MTHREADING
     std::future<CURLcode> async_result = pool->submit(http_job, url);
+    //std::future<CURLcode> async_result = pool->submit(&Http::fetch,&http, url);
 #else
+    //std::future<CURLcode> async_result = active>submit(&Http::fetch,&http, url);
     std::future<CURLcode> async_result = active->submit(http_job, url);
 #endif
 
