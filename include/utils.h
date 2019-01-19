@@ -46,13 +46,7 @@ struct data_t{
 
 class TestRunner{
 private:
-#ifdef MTHREADING
-    std::shared_ptr<ThreadPool> pool;
-#else
-    std::shared_ptr<concurrency::Active> active;
-#endif
-
-    ConcreteService service;
+    std::shared_ptr<ThreadPool>pool;
     std::vector<std::vector<int>> errors_list;
     std::vector<std::vector<int>> success_list;
     std::vector<std::vector<int>> durations_list;

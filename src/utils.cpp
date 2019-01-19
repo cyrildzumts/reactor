@@ -1,18 +1,13 @@
 #include "utils.h"
 
 
+
 TestRunner::TestRunner()
 {
     LOG("TestRunner constructed ...");
     int request = 0;
     double avg = 0.0;
-#ifdef MTHREADING
-
-        pool = std::make_shared<ThreadPool>();
-#else
-    active = std::make_shared<concurrency::Active>();
-#endif
-
+    pool = std::make_shared<ThreadPool>();
     for(size_t i = 0; i < requests.size(); i++){
         request = requests[i];
         delays_list.push_back(std::vector<int>());
@@ -152,19 +147,12 @@ long TestRunner::run_service_test(data_t &data)
     int ret = 0;
     std::future<CURLcode> code ;
     CURLcode res_code;
-    std::unique_ptr<Service> service = std::make_unique<ConcreteService>();
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
-            #ifdef MTHREADING
-                code = pool->submit(http_job,URL_2);
-            #else
-                code = active->submit(http_job,URL_2); // set the Active Object which provides a thread execution unit
-            #endif
 
-
+             code = pool->submit(http_job,URL_2);
              res_code = code.get();
-            //ret = service->process_request(request, delays_list[data.request_index][i] );
             ++success;
 
         } catch (...) {
@@ -187,7 +175,7 @@ long TestRunner::run_service_test(data_t &data)
 
 long TestRunner::run_cbreaker_test(data_t &data)
 {
-    //LOG("run cbreaker test started ...");
+    LOG("run cbreaker test started ...");
     int request = requests[data.request_index];
     int deadline = deadline_list[data.deadline_list_index][data.request_index];
     int errors = 0;
@@ -207,21 +195,16 @@ long TestRunner::run_cbreaker_test(data_t &data)
 #else
     retry_time = 100;
 #endif
-    CircuitBreaker cb(duration_ms_t(deadline), duration_ms_t(retry_time),failures_threshold);
-#ifdef MTHREADING
+    //using service_result_type = std::result_of_t<decltype (http_job)>();
+    CircuitBreaker<decltype (http_job), std::string> cb(duration_ms_t(deadline), duration_ms_t(retry_time),failures_threshold);
     cb.setPool(pool);
-#else
-    cb.setActive(active); // set the Active Object which provides a thread execution unit
-#endif
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
-#ifdef USE_REMOTE_SERVICE
-          code = cb.fetch_sumbit(URL_2);
-#else
-          cb.process_request(request, delays_list.at(data.request_index).at(i) );
-#endif
-            success++;
+
+                auto cod = cb.execute(URL_2);
+                code = cod.get();
+                success++;
         } catch (...) {
             errors++;
         }
