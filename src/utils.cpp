@@ -170,14 +170,17 @@ long TestRunner::run_cbreaker_test(data_t &data)
     int deadline = deadline_list[data.deadline_list_index][data.request_index];
     int errors = 0;
     int success = 0;
+    int rest= 0;
     long duration = 0;
     std::string header;
-    CircuitBreaker cb(duration_ms_t(deadline), duration_ms_t(100), 5 );
+    //CircuitBreaker cb(duration_ms_t(deadline), duration_ms_t(100), 5 );
+    breaker::AbstractBreaker<decltype (job),int, int> cb(duration_ms_t(deadline), duration_ms_t(100), 5 );
     cb.setActive(active); // set the Active Object which provides a thread execution unit
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
-            cb.process_request(request, delays_list.at(data.request_index).at(i) );
+            auto res = cb.execute(int{request},int{ delays_list.at(data.request_index).at(i)} );
+            rest = res.get();
             success++;
         } catch (...) {
             errors++;

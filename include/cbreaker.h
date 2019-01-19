@@ -20,11 +20,6 @@ using namespace std::chrono_literals;
 typedef std::chrono::time_point<std::chrono::system_clock> time_point_ms_t;
 typedef  std::chrono::microseconds duration_ms_t;
 
-
-
-
-
-
 namespace breaker {
 
 template<typename Callable, typename... Args>
@@ -38,84 +33,13 @@ struct typeof_t{
 
 
 template<typename Callable, typename... Args>
-class AbstractBreaker;
-
-
-template<typename Callable, typename... Args>
-class CircuitBreakerClosed;
-
-template<typename Callable, typename... Args>
-class CircuitBreakerOpen;
-
-template<typename Callable, typename... Args>
-class CircuitBreakerHalfOpen;
-
-
-template<typename Callable, typename... Args>
-class FSM{
-public:
-    using result_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
-protected:
-    std::vector<FunctionWrapper> listeners;
-protected:
-    /**
-     * @brief change_state this method changes the circuit breaker current state.
-     * @param cbr the context object.
-     * @param state the new state to transition to.
-     * when state is a nullptr, nothing is done.
-     */
-     void change_state(AbstractBreaker<Callable, Args...> *cbr, FSM<Callable, Args...> *state){
-        cbr->change_State(state);
-    }
-public:
-    virtual ~FSM(){}
-    /**
-     * @brief call_service this method executes the right operations depending the circuit breaker
-     * current state
-     * @param cbr the context into which the operations are executed.
-     * @param request the first parameter the Service is awaiting for.
-     * @param delay the second parameter the Service is awaiting for.
-     * @return
-     */
-    //virtual int call_service(CircuitBreaker *cbr,  int request, int delay) = 0;
-    virtual std::future<result_type> call(AbstractBreaker<Callable, Args...> *cbr, Args&&... args) = 0;
-
-    /**
-     * @brief trip this method performs operations required when transitioning in OPEN state
-     * @param cbr the context object in which the required operations are run.
-     */
-    virtual void trip(AbstractBreaker<Callable, Args...> *cbr) = 0;
-    /**
-     * @brief reset this method performs operations required when transitioning in CLOSED state
-     * @param cbrthe context object in which the required operations are run.
-     */
-    virtual void reset(AbstractBreaker<Callable, Args...> *cbr) = 0;
-    /**
-     * @brief notify this method executes the registered callback
-     * This method only runs the observers of the current state.
-     */
-    void notify(){
-        if(!listeners.empty()){
-            std::for_each(listeners.begin(), listeners.end(), [&](FunctionWrapper &f){
-                f();
-            });
-        }
-    }
-
-    /**
-     * @brief addObservers this method adds a new observer to the current state
-     * @param f the observer to add.
-     */
-    virtual void addObservers(FunctionWrapper f){
-        listeners.push_back(std::move(f));
-    }
-};
-
-template<typename Callable, typename... Args>
 class AbstractBreaker
 {
 public:
     using result_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
+    enum State {
+        CLOSED, OPEN, HALF_OPEN
+    };
 
 private:
 
@@ -156,14 +80,16 @@ private:
     duration_ms_t deadline;
 
 
+    std::vector<FunctionWrapper> closed_observers;
+    std::vector<FunctionWrapper> open_observers;
+    std::vector<FunctionWrapper> listeners;
     std::shared_ptr<concurrency::Active> active;
-    template<typename C, typename... params>
-    friend class FSM;
 
     /**
      * @brief current_state the current circuit breaker state
      */
-    FSM<Callable, Args...> *current_state;
+    State state;
+    Callable *op;
 
 private:
     /**
@@ -172,12 +98,91 @@ private:
      * if fsm_state is a nullptr, nothing happens. No transition, the circuit breaker stays in
      * in its current state.
      */
-    void change_State(FSM<Callable, Args...> *fsm_state){
-        if(fsm_state){
-            current_state = fsm_state;
-        #ifdef DEBUG_ON
-            current_state->notify();
-        #endif
+    void change_State(){
+
+    }
+    std::future<result_type> onClosedState(Args&&... args){
+        std::promise<result_type> result_not_ready;
+        std::future<result_type> result = result_not_ready.get_future();
+        std::future async_result = active->submit(op, std::forward<Args>(args)...);
+        std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
+        if( status == std::future_status::ready){
+            try {
+                result_not_ready.set_value(async_result.get());
+                reset();
+                ++successes;
+            } catch (const ServiceError &e) {
+                result_not_ready.set_exception(std::make_exception_ptr(e));
+
+                failure_count();
+                if(getFailure_counter() > getFailure_threshold()){
+                    trip();
+                    transition(OPEN);
+                }
+            }
+        }
+        else if(status == std::future_status::timeout){
+            result_not_ready.set_exception(std::make_exception_ptr(breaker::TimeoutError()));
+            failure_count();
+            if(getFailure_counter() > getFailure_threshold()){
+                trip();
+                transition(OPEN);
+            }
+        }
+        return result;
+    }
+    std::future<result_type> onOpenState(Args&&... args){
+        auto tmp = std::chrono::system_clock::now();
+        std::promise<result_type> error;
+        updateFailures();
+        auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - getFailure_time());
+        if( elapsed_time_duration >= getTime_to_retry()){
+            transition(HALF_OPEN);
+        }
+        error.set_exception(std::make_exception_ptr(ServiceError("SYSTEM NOW")));
+        return error.get_future();
+    }
+
+
+    std::future<result_type> onHalfOpenState(Args&&... args){
+        std::promise<result_type> result_not_ready;
+        std::future<result_type> result = result_not_ready.get_future();
+        std::future async_result = active->submit(op, std::forward<Args>(args)...);
+        std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
+        if( status == std::future_status::ready){
+            try {
+                result_not_ready.set_value(async_result.get());
+                reset();
+                transition(CLOSED);
+                ++successes;
+            } catch (const ServiceError &e) {
+                result_not_ready.set_exception(std::make_exception_ptr(e));
+                failure_count();
+                trip();
+                transition(OPEN);
+            }
+        }
+        else if(status == std::future_status::timeout){
+            result_not_ready.set_exception(std::make_exception_ptr(breaker::TimeoutError()));
+            failure_count();
+            trip();
+            transition(OPEN);
+        }
+        return result;
+    }
+
+
+
+    void transition(State state){
+        this->state = state;
+        if(state == OPEN){
+            std::for_each(open_observers.begin(), open_observers.end(), [](FunctionWrapper &observer){
+                observer();
+            });
+        }else if(state == CLOSED){
+            std::for_each(closed_observers.begin(), closed_observers.end(), [](FunctionWrapper &observer){
+                observer();
+            });
         }
     }
 public:
@@ -202,7 +207,8 @@ public:
      * After calling this method, the circuit breaker is an OPEN state.
      */
     void trip(){
-
+        failure_time = std::chrono::system_clock::now();
+        state = OPEN;
     }
     /**
      * @brief reset this method changes the circuit breaker current state to CLOSED state.
@@ -210,6 +216,7 @@ public:
      */
     void reset(){
         failure_counter = 0;
+        state = CLOSED;
     }
     /**
      * @brief failure_count this method count the number of time the service has already failed.
@@ -222,7 +229,7 @@ public:
     // Service interface
 public:
     /**
-     * @brief process_request This the interface to the client using the service provided by Service.
+     * @brief executeThis the interface to the client using the service provided by Service.
      * The operation performed when calling this method depends on the circuit breaker current state.
      * @param request the first parameter the Service is awaiting for.
      * @param delay delay the second parameter the Service is awaiting for.
@@ -230,21 +237,22 @@ public:
      * Note: if the Service threw an exception instead of returning a value, the same exception
      * rethrown by this method. So this method should be used in a try-catch block.
      */
-    int process_request(int request, int delay = PROCESSING_DURATION){
 
-    } // Client Interface: call are delegated to FSM
+    // Client Interface: call are delegated to FSM
 
-    std::future<result_type> execute(Args&&... args) {
+    std::future<result_type> execute(Args&&... args) noexcept {
         ++usage;
-        std::promise<result_type> p;
-        std::future<result_type> res_fut;
-        try{
-            res_fut = current_state->call(this, std::forward<Args>(args)...);
-        }catch(...){
-            p.set_exception(std::make_exception_ptr(std::current_exception()));
-            res_fut = p.get_future();
+        std::future<result_type> res;
+        if(state == CLOSED){
+            res = onClosedState(std::forward<Args>(args)...);
         }
-        return res_fut;
+        else if(state == OPEN){
+            res = onOpenState(std::forward<Args>(args)...);
+        }
+        else if(state == HALF_OPEN){
+            res = onHalfOpenState(std::forward<Args>(args)...);
+        }
+        return res ;
     }
     /**
      * @brief call helper method used internally by the State Machine. it delagate the request to the Service.
@@ -254,32 +262,7 @@ public:
      * Note: if the Service threw an exception instead of returning a value, the same exception
      * rethrown by this method. So this method should be used in a try-catch block.
      */
-    int call(int request, int delay);
-    std::future<result_type> intern_call(Args&&... args)noexcept {
-        std::promise<result_type> result_not_ready;
-        std::future<result_type> result = result_not_ready.get_future();
-        int ret = -1;
-        std::future async_result = active->submit(job, std::forward<Args>(args)...);
-        std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
-        if( status == std::future_status::ready){
-            try {
-                result_not_ready.set_value(async_result.get());
-                failure_counter = 0;
-                ++successes;
-            } catch (const ServiceError &e) {
-                result_not_ready.set_exception(std::make_exception_ptr(e));
-                failure_time = std::chrono::system_clock::now();
-                throw;
-            }
-        }
-        else if(status == std::future_status::timeout){
-            failure_time = std::chrono::system_clock::now();
-            result_not_ready.set_exception(std::make_exception_ptr(breaker::TimeoutError()));
-            throw  breaker::TimeoutError("Timeout for deadline :  " + std::to_string(deadline.count()));
 
-        }
-        return result;
-    }
 
     /**
      * @brief getFailure_counter helper function which return the number of failure encountered until the time this method is called.
@@ -389,188 +372,30 @@ class CBreaker : AbstractBreaker<Callable, Args...>{
 
 
 template<typename Callable, typename... Args>
-class CircuitBreakerOpen : public FSM<Callable, Args...>{
-    using result_type =std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
-private:
-    static FSM<Callable, Args...> *root;
-    CircuitBreakerOpen(){}
-    // FSM interface
-
-public:
-    virtual ~CircuitBreakerOpen(){}
-    static FSM<Callable, Args...> *instance(){
-        if(!root){
-            root = new CircuitBreakerOpen;
-            root->addObservers([](){
-                LOG("Circuit Breaker open ...");
-            });
-        }
-        return root;
-    }
-
-    // FSM interface
-public:
-    virtual void trip(AbstractBreaker<Callable, Args...> *cbr) override{
-
-    }
-    virtual void reset(AbstractBreaker<Callable, Args...> *cbr) override{
-
-    }
-    std::future<result_type> call(AbstractBreaker<Callable, Args...> *cbr, Args&&... args){
-        auto tmp = std::chrono::system_clock::now();
-        std::promise<result_type> error;
-        error.set_exception(std::make_exception_ptr(ServiceError("SYSTEM DOWN")));
-        cbr->updateFailures();
-        auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - cbr->getFailure_time());
-        if( elapsed_time_duration >= cbr->getTime_to_retry()){
-            this->change_state(cbr, CircuitBreakerHalfOpen<Callable, Args...>::instance());
-        }
-        return error.get_future(); // just to be conformant to the signature
-    }
-};
-
-
-
-
-template<typename Callable, typename... Args>
-class CircuitBreakerClosed : public FSM<Callable, Args...>{
-
-public:
-    using result_type =std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
-private:
-    static FSM<Callable, Args...> *root;
-    CircuitBreakerClosed(){}
-    // FSM interface
-
-public:
-    virtual ~CircuitBreakerClosed(){}
-    static FSM<Callable, Args...> *instance(){
-        if(!root){
-            root = new CircuitBreakerClosed;
-            root->addObservers([](){
-                LOG("Circuit Breaker closed ...");
-            });
-        }
-        return root;
-    }
-
-    // FSM interface
-public:
-    virtual void trip(AbstractBreaker<Callable, Args...> *cbr) override{
-        cbr->trip();
-        this->change_state(cbr, CircuitBreakerOpen<Callable, Args...>::instance());
-    }
-    virtual void reset(AbstractBreaker<Callable, Args...> *cbr) override{
-        cbr->reset();
-    }
-
-
-    std::future<result_type> call(AbstractBreaker<Callable, Args...> *cbr, Args&&... args){
-
-        std::future<result_type> ret;
-
-
-        try {
-            ret = cbr->intern_call(std::forward<Args>(args)...);
-            this->reset(cbr);
-        } catch (...) {
-            cbr->failure_count();
-            if(cbr->getFailure_counter() > cbr->getFailure_threshold()){
-                this->trip(cbr);
-            }
-            std::promise<result_type> err_promise;
-            err_promise.set_exception(std::current_exception());
-            ret = err_promise.get_future();
-            throw;
-        }
-        return  ret;
-    }
-};
-
-template<typename Callable, typename... Args>
-class CircuitBreakerHalfOpen : public FSM<Callable, Args...>{
-public:
-    using result_type =std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
-private:
-    static FSM<Callable, Args...> *root;
-    CircuitBreakerHalfOpen(){}
-    // FSM interface
-public:
-    virtual ~CircuitBreakerHalfOpen(){}
-    static FSM<Callable, Args...> *instance(){
-        if(!root){
-            root = new CircuitBreakerHalfOpen;
-            root->addObservers([](){
-                LOG("Circuit Breaker half open ...");
-            });
-        }
-        return root;
-    }
-
-
-    // FSM interface
-public:
-    virtual void trip(AbstractBreaker<Callable, Args...> *cbr) override
-    {
-        cbr->trip();
-        this->change_state(cbr, CircuitBreakerOpen<Callable, Args...>::instance());
-    }
-    virtual void reset(AbstractBreaker<Callable, Args...> *cbr) override
-    {
-        cbr->reset();
-    }
-
-    std::future<result_type> call(AbstractBreaker<Callable, Args...> *cbr, Args&&... args){
-        std::future<result_type> ret;
-
-        try {
-            ret = cbr->intern_call(std::forward<Args>(args)...);
-            this->reset(cbr);
-        } catch (...) {
-            cbr->failure_count();
-            this->trip(cbr);
-            std::promise<result_type> err_promise;
-            err_promise.set_exception(std::current_exception());
-            ret = err_promise.get_future();
-        }
-        return  ret;
-    }
-};
-
-template<typename Callable, typename... Args>
-FSM<Callable, Args...> *CircuitBreakerClosed<Callable, Args...>::root = nullptr;
-
-template<typename Callable, typename... Args>
-FSM<Callable, Args...> *CircuitBreakerOpen<Callable, Args...>::root = nullptr;
-
-template<typename Callable, typename... Args>
-FSM<Callable, Args...> *CircuitBreakerHalfOpen<Callable, Args...>::root = nullptr;
-
-
-template<typename Callable, typename... Args>
 AbstractBreaker<Callable, Args...>::AbstractBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
     failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
 {
-    current_state = CircuitBreakerClosed<Callable, Args...>::instance();
+    state = CLOSED;
     failure_counter = 0;
     failures = 0;
     successes = 0;
     usage = 0;
+    op = job;
 }
 
 template<typename Callable, typename... Args>
 void AbstractBreaker<Callable, Args...>::addOnCircuitBreakClosedObserver(FunctionWrapper observer){
-    CircuitBreakerClosed<Callable, Args...>::instance()->addObservers(std::move(observer));
+    closed_observers.push_back(std::move(observer));
 }
 
 template<typename Callable, typename... Args>
 void AbstractBreaker<Callable, Args...>::addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer){
-    CircuitBreakerHalfOpen<Callable, Args...>::instance()->addObservers(std::move(observer));
+    //half_open_observers.push_back(std::move(observer));
 }
 
 template<typename Callable, typename... Args>
 void AbstractBreaker<Callable, Args...>::addOnCircuitBreakOpenObserver(FunctionWrapper observer){
-    CircuitBreakerOpen<Callable, Args...>::instance()->addObservers(std::move(observer));
+    open_observers.push_back(std::move(observer));
 }
 
 

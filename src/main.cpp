@@ -12,15 +12,21 @@ int main(int argc, char const *argv[])
 {
     LOG("Reactor: Circuit Breaker ");
     LOG("TESTING CBREAKER IMPLEMENTATION");
+    /*
     std::shared_ptr<concurrency::Active>active = std::make_shared<concurrency::Active>();
     breaker::AbstractBreaker<decltype (job),int, int> cb(duration_ms_t(10), duration_ms_t(100), 5 );
     cb.setActive(active);
     std::future<task_result_t> rest;
     try {
         rest = cb.execute(10, 40);
-    } catch (...) {
-        LOG("EXCept thrown");
+        LOG("MAIN Res : ", rest.get());
+
+    } catch (ServiceError &e) {
+        LOG("EXCept thrown - ", e.what());
     }
+    catch (breaker::TimeoutError &e) {
+            LOG("EXCept thrown - ", e.what());
+        }
 //    auto res = cb.execute(10, 40);
 //    int ret = -1;
 //    try {
@@ -30,12 +36,12 @@ int main(int argc, char const *argv[])
 
 //        LOG("RESULT ERROR: ", e.what());
 //    }
-/*
+*/
+
     TestRunner runner;
     runner.run_test();
     runner.save_result();
     runner.save__service_result();
-    */
 
     return 0;
 }
