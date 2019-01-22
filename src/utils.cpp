@@ -7,7 +7,11 @@ TestRunner::TestRunner()
     LOG("TestRunner constructed ...");
     int request = 0;
     double avg = 0.0;
-    pool = std::make_shared<ThreadPool>();
+    std::optional<size_t> threading = std::nullopt;
+#ifdef MTHREADING
+    threading = MTHREADING;
+#endif
+    pool = std::make_shared<ThreadPool>(threading);
     for(size_t i = 0; i < requests.size(); i++){
         request = requests[i];
         delays_list.push_back(std::vector<int>());
@@ -100,9 +104,6 @@ void TestRunner::run_test(int percent_index)
     for(size_t i = 0; i < requests.size(); i++){
         data.request_index = i;
         duration = run_service_test(data);
-        //LOG("ervice Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
-        //    " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
-        //LOG("Durarion : ", duration);
         service_errors_list.at(percent_index).push_back(data.errors);
         service_success_list.at(percent_index).push_back(data.success);
         service_durations_list.at(percent_index).push_back(data.duration);
@@ -169,7 +170,7 @@ long TestRunner::run_service_test(data_t &data)
     data.ratio_success = static_cast<double>(success)/request;
     data.ratio_trip = 0.0;
     data.percent = percents[data.deadline_list_index];
-    //LOG("run Service test finished ... : duration : ", data.duration, " duration 2 : ", duration);
+    
     return duration;
 }
 
@@ -196,13 +197,13 @@ long TestRunner::run_cbreaker_test(data_t &data)
     retry_time = 100;
 #endif
     //using service_result_type = std::result_of_t<decltype (http_job)>();
-    CircuitBreaker<decltype (http_job), std::string> cb(duration_ms_t(deadline), duration_ms_t(retry_time),failures_threshold);
+    CircuitBreaker<decltype(http_job),std::string> cb(duration_ms_t(deadline), duration_ms_t(retry_time),failures_threshold);
     cb.setPool(pool);
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
 
-                auto cod = cb.execute(URL_2);
+                std::future<CURLcode> cod = cb.execute(URL_2);
                 code = cod.get();
                 success++;
         } catch (...) {

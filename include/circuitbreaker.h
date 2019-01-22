@@ -14,6 +14,13 @@
 #include <memory>
 #include <log.h> // my own developped Logger
 
+/******************************************************************
+ * Author : Cyrille Ngassam Nkwenga
+ * Year : 2019
+ * This header contains the implementation of the circuit breaker
+ * pattern.
+ ****************************************************************/
+
 /**
  * @brief The TimeoutError class An Exception thrown when the Service
  * doesn't return a response in the deadline.
@@ -37,15 +44,35 @@ template<typename Callable, typename... Args>
 class CircuitBreaker
 {
 public:
+    /**
+     * this template decuces the result type of the submited request.
+     * It help us to built the right std::future by using calling
+     * std::future<result_type> to return the result of the request.
+     */
     using result_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
-
+    using task_type = result_type(*)(std::decay_t<Args>...);
 
 
 private:
-    Callable *service;
+    task_type task;
+    /**
+     * @brief state this variable describe the current circuit breaker state
+     */
     State state;
+    /**
+     * @brief ratio represents the success ratio until now.
+     * It holds a percentage value
+     */
     double ratio;
+    /**
+     * @brief ratio_trip this variable reprensent ratio at which the circuit trips.
+     * It holds a percentage value
+     */
     double ratio_trip;
+    /**
+     * @brief failure_threshold_reached this variable represents the number of time
+     * the circuit breaker has tripped.
+     */
     int failure_threshold_reached;
     /**
      * @brief usage the number of call made through this circuit breaker instance.
@@ -82,41 +109,147 @@ private:
      * @brief deadline time to wait for the service's reply
      */
     duration_ms_t deadline;
-    /**
-     * @brief current_state the current circuit breaker state
-     */
 
+    /**
+     * @brief closed_observers this is the list of observer (callback) to be call when the circuit
+     * becomes closed
+     */
     std::vector<FunctionWrapper> closed_observers;
+    /**
+     * @brief open_observers this is the list of observer (callback) to be call when the circuit
+     * becomes open.
+     */
     std::vector<FunctionWrapper> open_observers;
+    /**
+     * @brief listeners this is the list of observer (callback) to be call when the circuit
+     * changes it state.
+     */
     std::vector<FunctionWrapper> listeners;
+    /**
+     * @brief pool the Thread pool that is used to run request in decated threads.
+     */
     std::shared_ptr<ThreadPool> pool;
     // private interface
 private:
-    std::future<result_type> onClosedState(Args&&... args);
-        std::future<result_type> onOpenState(Args&&... args);
-        std::future<result_type> onHalfOpenState(Args&&... args);
+    /**
+     * @brief onClosedState processes the request when the circuit in the closed state.
+     * @param args The list of arguments that are to be forward to the service
+     * @return a std::future containing the result of the request.
+     */
+    std::future<result_type> onClosedState(Args&&... args){
+        std::promise<result_type> result_not_ready;
 
-        void transition(State state){
-            this->state = state;
-            if(state == State::OPEN){
-                std::for_each(open_observers.begin(), open_observers.end(), [](FunctionWrapper &observer){
-                    observer();
-                });
-            }else if(state == State::CLOSED){
-                std::for_each(closed_observers.begin(), closed_observers.end(), [](FunctionWrapper &observer){
-                    observer();
-                });
+        std::future<result_type> result = result_not_ready.get_future();
+        std::future async_result = pool->submit(http_job, std::forward<Args>(args)...);
+        std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
+        if( status == std::future_status::ready){
+            try {
+                result_not_ready.set_value(async_result.get());
+                reset();
+            } catch (const ServiceError &e) {
+                result_not_ready.set_exception(std::make_exception_ptr(e));
+                failure_count();
+                if(getFailure_counter() > getFailure_threshold()){
+                    ++failure_threshold_reached;
+                    trip();
+                }
             }
         }
-private:
-    /**
-     * @brief change_State this method changes the circuit breaker's current state
-     * @param fsm_state the new state to transition to.
-     * if fsm_state is a nullptr, nothing happens. No transition, the circuit breaker stays in
-     * in its current state.
-     */
-public:
+        else if(status == std::future_status::timeout){
+            result_not_ready.set_exception(std::make_exception_ptr(TimeoutError()));
+            failure_count();
+            if(getFailure_counter() > getFailure_threshold()){
+                ++failure_threshold_reached;
+                trip();
+            }
+            else {
 
+            }
+        }
+        return result;
+    }
+
+    /**
+     * @brief onOpenState processes the request when the circuit in the open state.
+     * @param args The list of arguments that are to be forward to the service
+     * @return a std::future containing the result of the request.
+     */
+    std::future<result_type> onOpenState(Args&&... args){
+        auto tmp = std::chrono::system_clock::now();
+    std::promise<result_type> error;
+    updateFailures();
+    auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - getFailure_time());
+    if( elapsed_time_duration >= getTime_to_retry()){
+        transition(State::HALF_OPEN);
+    }
+    error.set_exception(std::make_exception_ptr(ServiceError("SYSTEM NOW")));
+    return error.get_future();
+    }
+
+    /**
+     * @brief onHalfOpenState processes the request when the circuit in the half-open state.
+     * @param args The list of arguments that are to be forward to the service
+     * @return a std::future containing the result of the request.
+     */
+        std::future<result_type> onHalfOpenState(Args&&... args){
+        std::promise<result_type> result_not_ready;
+        std::future<result_type> result = result_not_ready.get_future();
+        std::future async_result = pool->submit(http_job, std::forward<Args>(args)...);
+        std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
+        if( status == std::future_status::ready){
+            try {
+                result_not_ready.set_value(async_result.get());
+                reset();
+            } catch (const ServiceError &e) {
+                result_not_ready.set_exception(std::make_exception_ptr(e));
+                updateFailures();
+                trip();
+            }
+        }
+        else if(status == std::future_status::timeout){
+            result_not_ready.set_exception(std::make_exception_ptr(TimeoutError()));
+            updateFailures();
+            trip();
+        }
+        return result;
+    }
+
+    /**
+     * @brief transition this method changes the circuit breaker current state
+     * and notify the registered observers about this change. Nothing happens when
+     * state is the current circuit state.
+     * @param state the new circuit state.
+     */
+    void transition(State state){
+         if(this->state != state){
+        this->state = state;
+        if(state == State::OPEN){
+            std::for_each(open_observers.begin(), open_observers.end(), [](FunctionWrapper &observer){
+                observer();
+            });
+        }else if(state == State::CLOSED){
+            std::for_each(closed_observers.begin(), closed_observers.end(), [](FunctionWrapper &observer){
+                observer();
+            });
+        }
+    }
+    }
+public:
+    /*
+    explicit CircuitBreaker( duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
+    failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
+{
+
+    ratio = 0.0;
+    ratio_trip = 0.0;
+    state = State::CLOSED;
+    failure_counter = 0;
+    failures = 0;
+    successes = 0;
+    usage = 0;
+    failure_threshold_reached = 0;
+}
+*/
     /**
      * @brief CircuitBreaker construct the Circuit breaker with the settings provided by user.
      * @param service Service which  processes the request
@@ -125,245 +258,7 @@ public:
      * @param failure_threshold the number of allowed failures in row before transitioning from CLOSED state
      * to OPEN state.
      */
-    explicit CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold);
-
-    ~CircuitBreaker();
-    /**
-     * @brief trip this method changes the Circuit breaker current state to OPEN state.
-     * This method is called everytime the failure threshold is reached.
-     * After calling this method, the circuit breaker is an OPEN state.
-     */
-    void trip();
-    /**
-     * @brief reset this method changes the circuit breaker current state to CLOSED state.
-     * This method is executed when the service succeed.
-     */
-    void reset();
-    /**
-     * @brief failure_count this method count the number of time the service has already failed.
-     * It is called everytime the Service failed a request.
-     */
-    void failure_count();
-    // Service interface
-public:
-    /**
-     * @brief process_request This the interface to the client using the service provided by Service.
-     * The operation performed when calling this method depends on the circuit breaker current state.
-     * @param request the first parameter the Service is awaiting for.
-     * @param delay delay the second parameter the Service is awaiting for.
-     * @return the returned value by the Service.
-     * Note: if the Service threw an exception instead of returning a value, the same exception
-     * rethrown by this method. So this method should be used in a try-catch block.
-     */
-    std::future<result_type> execute(Args&&... args);
-
-    /**
-     * @brief call helper method used internally by the State Machine. it delagate the request to the Service.
-     * @param request the first parameter the Service is awaiting for.
-     * @param delay the second parameter the Service is awaiting for.
-     * @return the returned value by the Service.
-     * Note: if the Service threw an exception instead of returning a value, the same exception
-     * rethrown by this method. So this method should be used in a try-catch block.
-     */
-
-
-    /**
-     * @brief getFailure_counter helper function which return the number of failure encountered until the time this method is called.
-     * @return total number of failure before the circuit breaker trips.
-     * Note : This number is the number of failure in a row, not the total number of failure since the programme started.
-     */
-    int getFailure_counter() const;
-
-    /**
-     * @brief getFailures return the failures count since the programm started
-     * @return failures
-     */
-    int getFailures() const;
-
-    /**
-     * @brief getTime_to_retry helper function which returns the time the circuit breaker waits before changing
-     * from OPEN state to HALF_OPEN state.
-     * @return a duration object contains the time to wait before retry.
-     */
-    duration_ms_t getTime_to_retry() const;
-
-
-    /**
-     * @brief getFailure_time helper function which returns the last time point when the Service failed a request
-
-     * @return a time point object contains the time point when the last failure occured.
-     */
-    time_point_ms_t getFailure_time() const;
-    /**
-     * @brief addOnCircuitBreakClosedObserver this method register observer which should be called everytime
-     * the circuit breaker changes it current state to the CLOSED state.
-     * @param observer the code to be executed the circuit breaker changes to CLOSED state.
-     * Note that the observer is just a callback function with the signature :
-     * void()
-     */
-    void addOnCircuitBreakClosedObserver(FunctionWrapper observer);
-    /**
-     * @brief addOnCircuitBreakOpenObserver this method register observer which should be called everytime
-     * the circuit breaker changes it current state to the OPEN state.
-     * @param observer the code to be executed the circuit breaker changes to OPEN state.
-     * Note that the observer is just a callback function with the signature :
-     * void()
-     */
-    void addOnCircuitBreakOpenObserver(FunctionWrapper observer);
-
-    /**
-     * @brief addOnCircuitBreakHalfOpenObserver this method register observer which should be called everytime
-     * the circuit breaker changes it current state to the HALF_OPEN state.
-     * @param observer the code to be executed the circuit breaker changes to HALF_OPEN state.
-     * Note that the observer is just a callback function with the signature :
-     * void()
-     */
-    void addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer);
-
-
-    /**
-     * @brief getUsage accessor to the usage count of this circuit breaker
-     * @return usage
-     */
-    int getUsage() const;
-    void updateFailures();
-    int getSuccesses() const;
-    int getFailure_threshold() const;
-    double getRatio() const;
-    int getFailure_threshold_reached() const;
-    double getRatio_trip() const;
-    void updateRatio();
-    bool isOpen() const;
-    bool isClosed()const;
-    bool isHalfOpen() const;
-
-    void setPool(const std::shared_ptr<ThreadPool> &value){
-        pool = value;
-    }
-};
-
-
-template<typename Callable, typename... Args>
-double CircuitBreaker<Callable, Args...>::getRatio_trip()const{
-    return  ratio_trip;
-}
-
-
-template<typename Callable, typename... Args>
-double CircuitBreaker<Callable, Args...>::getRatio()const{
-    return  ratio;
-}
-
-template<typename Callable, typename... Args>
-int CircuitBreaker<Callable, Args...>::getFailure_threshold()const{
-    return  failure_threshold;
-}
-
-template<typename Callable, typename... Args>
-int CircuitBreaker<Callable, Args...>::getFailure_threshold_reached()const{
-    return  failure_threshold_reached;
-}
-
-template<typename Callable, typename... Args>
-int CircuitBreaker<Callable, Args...>::getSuccesses()const{
-    return  successes;
-}
-
-
-template<typename Callable, typename... Args>
-void CircuitBreaker<Callable, Args...>::updateFailures(){
-    ++failures;
-}
-
-template<typename Callable, typename... Args>
-duration_ms_t CircuitBreaker<Callable, Args...>::getTime_to_retry()const{
-    return  time_to_retry;
-}
-
-template<typename Callable, typename... Args>
-time_point_ms_t CircuitBreaker<Callable, Args...>::getFailure_time()const{
-    return  failure_time;
-}
-
-template<typename Callable, typename... Args>
-int CircuitBreaker<Callable, Args...>::getFailures()const{
-    return  failures;
-}
-
-template<typename Callable, typename... Args>
-int CircuitBreaker<Callable, Args...>::getFailure_counter()const{
-    return  failure_counter;
-}
-
-template<typename Callable, typename... Args>
-int CircuitBreaker<Callable, Args...>::getUsage()const{
-    return  usage;
-}
-
-
-template<typename Callable, typename... Args>
-void CircuitBreaker<Callable, Args...>::failure_count(){
-    ++failure_counter;
-    ++failures;
-    
-}
-
-template<typename Callable, typename... Args>
-bool CircuitBreaker<Callable, Args...>::isHalfOpen()const{
-    return  state == State::HALF_OPEN;
-}
-template<typename Callable, typename... Args>
-bool CircuitBreaker<Callable, Args...>::isClosed()const{
-    return  state == State::CLOSED;
-}
-
-template<typename Callable, typename... Args>
-bool CircuitBreaker<Callable, Args...>::isOpen()const{
-    return  state == State::OPEN;
-}
-
-template<typename Callable, typename... Args>
-void CircuitBreaker<Callable, Args...>::updateRatio(){
-    if(usage){
-        ratio =100 * (static_cast<double>(successes)/usage);
-        ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage);
-    }
-}
-
-template<typename Callable, typename... Args>
-void CircuitBreaker<Callable, Args...>::trip(){
-    failure_time = std::chrono::system_clock::now();
-    ++failure_threshold_reached;
-    updateRatio();
-    state = State::OPEN;
-}
-template<typename Callable, typename... Args>
-void CircuitBreaker<Callable, Args...>::reset(){
-    failure_counter = 0;
-    state = State::CLOSED;
-}
-
-
-
-template<typename Callable, typename... Args>
-void CircuitBreaker<Callable, Args...>::addOnCircuitBreakOpenObserver(FunctionWrapper observer){
-    open_observers.push_back(std::move(observer));
-}
-
-template<typename Callable, typename... Args>
-void CircuitBreaker<Callable, Args...>::addOnCircuitBreakClosedObserver(FunctionWrapper observer){
-    closed_observers.push_back(std::move(observer));
-}
-
-template<typename Callable, typename... Args>
-void CircuitBreaker<Callable, Args...>::addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer){
-    //listeners.push_back(std::move(observer));
-}
-
-
-
-template<typename Callable, typename... Args>
- CircuitBreaker<Callable, Args...>::CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
+    explicit CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
      failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
 {
     ratio = 0.0;
@@ -377,29 +272,63 @@ template<typename Callable, typename... Args>
 }
 
 
-
- /*************************************************************************************************
-  * **********************************************************************************************/
- template<typename Callable, typename... Args>
-  CircuitBreaker<Callable, Args...>::~CircuitBreaker()
- {
-
-     if(usage){
+    ~CircuitBreaker(){
+        if(usage){
          ratio =100 * (static_cast<double>(successes)/usage);
-         ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage);
+         ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage) * failure_threshold;
      }
  #ifdef DEBUG_ON
      LOG("usage summary :\tsuccess =\t", successes, ";\terror = ", failures,
          ";\tusage : ",usage, ";\tdeadline(",TIME_UNIT,"): ",deadline.count(),
          " Success RATIO(%):", ratio, " Number of trip :", failure_threshold_reached,
          " Trip Ratio(%) :", ratio_trip);
+    LOG("CB THREAD POOL usage summary : ", "submitted tasks : ", pool->getSubmitted(), " finished tasks : ", pool->getFinishedTasks(), " still active : ", pool->getActiveTask());
+    
  #endif
- }
+    }
 
-/*************************************************************************************************
- * **********************************************************************************************/
-template<typename Callable, typename... Args>
-std::future<std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>> CircuitBreaker<Callable, Args...>::execute(Args&&... args) {
+    /**
+     * @brief trip this method changes the Circuit breaker current state to OPEN state.
+     * This method is called everytime the failure threshold is reached.
+     * After calling this method, the circuit breaker is in an OPEN state.
+     * The ratio_trips is updated when this method is called.
+     */
+    void trip(){
+        failure_time = std::chrono::system_clock::now();
+    failure_counter = 0;
+    transition(State::OPEN);
+    }
+    /**
+     * @brief reset this method is called when the request succeed. AFter calling this
+     * method the circuit breaker is in CLOSED state.
+     *
+     */
+    void reset(){
+         ++successes;
+    failure_counter = 0;
+    transition(State::CLOSED);
+    }
+    /**
+     * @brief failure_count this method count the number of time the service has already failed.
+     * It is called everytime the Service failed a request.
+     */
+    void failure_count(){
+        ++failure_counter;
+        ++failures;
+    }
+    // Service interface
+public:
+
+    /**
+     * @brief execute the client uses this method to submit a new request to the service.
+     *
+     * @param args the arguments the service accepts to process the request.
+     * @return a std::future containing the result of the request.
+     * On success the future contains a the result.
+     * On failure the future contains an exception indicating the error.
+     * These exception might be ServiceError or TimeoutError.
+     */
+    std::future<result_type> execute(Args&&... args){
         ++usage;
         std::future<result_type> res;
         if(state == State::CLOSED){
@@ -411,81 +340,186 @@ std::future<std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>>
         else if(state == State::HALF_OPEN){
             res = onHalfOpenState(std::forward<Args>(args)...);
         }
+        updateRatio();
         return res ;
     }
 
-template<typename Callable, typename... Args>
-std::future<std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>> CircuitBreaker<Callable, Args...>::onHalfOpenState(Args&&... args){
-    std::promise<result_type> result_not_ready;
-    std::future<result_type> result = result_not_ready.get_future();
-    std::future async_result = pool->submit(http_job, std::forward<Args>(args)...);
-    std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
-    if( status == std::future_status::ready){
-        try {
-            result_not_ready.set_value(async_result.get());
-            reset();
-            transition(State::CLOSED);
-            ++successes;
-        } catch (const ServiceError &e) {
-            result_not_ready.set_exception(std::make_exception_ptr(e));
-            failure_count();
-            trip();
-            transition(State::OPEN);
-        }
+    /**
+     * @brief getFailure_counter helper function which return the number of failure encountered until the time this method is called.
+     * @return total number of failure before the circuit breaker trips.
+     * Note : This number is the number of failure in a row, not the total number of failure since the programme started.
+     */
+    int getFailure_counter() const{
+        return failure_counter;
     }
-    else if(status == std::future_status::timeout){
-        result_not_ready.set_exception(std::make_exception_ptr(TimeoutError()));
-        failure_count();
-        trip();
-        transition(State::OPEN);
+
+    /**
+     * @brief getFailures return the failures count since the programm started
+     * @return failures
+     */
+    int getFailures() const{
+        return failures;
     }
-    return result;
-}
 
-template<typename Callable, typename... Args>
-std::future<std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>> CircuitBreaker<Callable, Args...>::onOpenState(Args&&... args){
-    auto tmp = std::chrono::system_clock::now();
-    std::promise<result_type> error;
-    updateFailures();
-    auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - getFailure_time());
-    if( elapsed_time_duration >= getTime_to_retry()){
-        transition(State::HALF_OPEN);
+    /**
+     * @brief getTime_to_retry helper function which returns the time the circuit breaker waits before changing
+     * from OPEN state to HALF_OPEN state.
+     * @return a duration object contains the time to wait before retry.
+     */
+    duration_ms_t getTime_to_retry() const{
+        return time_to_retry;
     }
-    error.set_exception(std::make_exception_ptr(ServiceError("SYSTEM NOW")));
-    return error.get_future();
-}
 
 
-template<typename Callable, typename... Args>
-std::future<std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>> CircuitBreaker<Callable, Args...>::onClosedState(Args&&... args){
-        std::promise<result_type> result_not_ready;
+    /**
+     * @brief getFailure_time helper function which returns the last time point when the Service failed a request
 
-        std::future<result_type> result = result_not_ready.get_future();
-        std::future async_result = pool->submit(http_job, std::forward<Args>(args)...);
-        std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
-        if( status == std::future_status::ready){
-            try {
-                result_not_ready.set_value(async_result.get());
-                reset();
-                ++successes;
-            } catch (const ServiceError &e) {
-                result_not_ready.set_exception(std::make_exception_ptr(e));
-
-                failure_count();
-                if(getFailure_counter() > getFailure_threshold()){
-                    trip();
-                    transition(State::OPEN);
-                }
-            }
-        }
-        else if(status == std::future_status::timeout){
-            result_not_ready.set_exception(std::make_exception_ptr(TimeoutError()));
-            failure_count();
-            if(getFailure_counter() > getFailure_threshold()){
-                trip();
-                transition(State::OPEN);
-            }
-        }
-        return result;
+     * @return a time point object contains the time point when the last failure occured.
+     */
+    time_point_ms_t getFailure_time() const{
+        return failure_time;
     }
+
+    /**
+     * @brief addOnCircuitBreakClosedObserver this method register observer which should be called everytime
+     * the circuit breaker changes it current state to the CLOSED state.
+     * @param observer the code to be executed the circuit breaker changes to CLOSED state.
+     * Note I : The observer is just a callback function with the signature : void()
+     * Note II: The observer is run on the caller thread. The observer should note last long.
+     */
+    void addOnCircuitBreakClosedObserver(FunctionWrapper observer){
+         closed_observers.push_back(std::move(observer));
+    }
+    /**
+     * @brief addOnCircuitBreakOpenObserver this method register observer which should be called everytime
+     * the circuit breaker changes it current state to the OPEN state.
+     * @param observer the code to be executed the circuit breaker changes to OPEN state.
+     * Note I : The observer is just a callback function with the signature : void()
+     * Note II: The observer is run on the caller thread. The observer should note last long.
+     */
+    void addOnCircuitBreakOpenObserver(FunctionWrapper observer){
+        open_observers.push_back(std::move(observer));
+    }
+
+    /**
+     * @brief addOnCircuitBreakHalfOpenObserver this method register observer which should be called everytime
+     * the circuit breaker changes it current state to the HALF_OPEN state.
+     * @param observer the code to be executed the circuit breaker changes to HALF_OPEN state.
+     * Note I : The observer is just a callback function with the signature : void()
+     * Note II: The observer is run on the caller thread. The observer should note last long.
+     */
+    void addOnCircuitBreakHalfOpenObserver(FunctionWrapper observer){
+
+    }
+
+
+    /**
+     * @brief getUsage get the number of time the circuit is used until the
+     * time this method is called.
+     * @return usage
+     */
+    int getUsage() const{
+        return usage;
+    }
+
+    /**
+     * @brief updateFailures updates the number of time the serive has failed
+     */
+    void updateFailures(){
+        ++failure_counter;
+    ++failures;
+    if(failure_counter >= failure_threshold){
+        ++failure_threshold_reached;
+        failure_counter = 0;
+    }
+    }
+
+    /**
+     * @brief getSuccesses get the number of time the service succeed until
+     * the time this method is called
+     * @return
+     */
+    int getSuccesses() const{
+        return successes;
+    }
+
+    /**
+     * @brief getFailure_threshold get the failure threshold currently set in the circuit.
+     * @return
+     */
+    int getFailure_threshold() const{
+        return failure_threshold;
+    }
+
+    /**
+     * @brief getRatio get the current ratio of success. This value already converted in percent
+     * @return ratio
+     */
+    double getRatio() const{
+        return ratio;
+    }
+
+    /**
+     * @brief getFailure_threshold_reached get the number of time the failure threshold
+     * has been reached until this method is called.
+     * @return failure_threshold_reached
+     */
+    int getFailure_threshold_reached() const{
+        return failure_threshold_reached;
+    }
+
+    /**
+     * @brief getRatio_trip get the ratio on how many time the circuit has tripped.
+     * @return ratio_trip
+     */
+    double getRatio_trip() const{
+        return ratio_trip;
+    }
+
+    /**
+     * @brief updateRatio Update the success ratio and the trip ratio.
+     */
+    void updateRatio(){
+        if(usage){
+        ratio =100 * (static_cast<double>(successes)/usage);
+        ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage) * failure_threshold;
+    }
+    }
+
+    /**
+     * @brief isOpen check if the circuit is currently open
+     * @return  true when the circuit is open. It returns false when the
+     * circuit is not in the open state.
+     */
+    bool isOpen() const{
+        return state == State::OPEN;
+    }
+
+    /**
+     * @brief isClosed check if the circuit is currently closed
+     * @return  true when the circuit is closed. It returns false when the
+     * circuit is not in the closed state.
+     */
+    bool isClosed()const{
+        return  state == State::CLOSED;
+    }
+
+    /**
+     * @brief isHalfOpen check if the circuit is currently half-open
+     * @return  true when the circuit is half-open. It returns false when the
+     * circuit is not in the half-open state.
+     */
+    bool isHalfOpen() const{
+         return  state == State::HALF_OPEN;
+    }
+
+    /**
+     * @brief setPool set the thread pool used to run the submited requests
+     * @param value
+     */
+    void setPool(const std::shared_ptr<ThreadPool> &pool){
+        this->pool = pool;
+    }
+};
+
 #endif // CIRCUITBREAKER_H
