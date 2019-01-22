@@ -50,7 +50,7 @@ public:
      * std::future<result_type> to return the result of the request.
      */
     using result_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
-    using task_type = result_type(*)(std::decay_t<Args>...);
+    using task_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>(*)(std::decay_t<Args>...);
 
 
 private:
@@ -140,7 +140,7 @@ private:
         std::promise<result_type> result_not_ready;
 
         std::future<result_type> result = result_not_ready.get_future();
-        std::future async_result = pool->submit(http_job, std::forward<Args>(args)...);
+        std::future async_result = pool->submit(task, std::forward<Args>(args)...);
         std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
         if( status == std::future_status::ready){
             try {
@@ -194,7 +194,7 @@ private:
         std::future<result_type> onHalfOpenState(Args&&... args){
         std::promise<result_type> result_not_ready;
         std::future<result_type> result = result_not_ready.get_future();
-        std::future async_result = pool->submit(http_job, std::forward<Args>(args)...);
+        std::future async_result = pool->submit(task, std::forward<Args>(args)...);
         std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
         if( status == std::future_status::ready){
             try {
@@ -235,9 +235,9 @@ private:
     }
     }
 public:
-    /*
-    explicit CircuitBreaker( duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
-    failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
+
+    explicit CircuitBreaker(task_type task, duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
+        task{task} ,failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
 {
 
     ratio = 0.0;
@@ -249,7 +249,7 @@ public:
     usage = 0;
     failure_threshold_reached = 0;
 }
-*/
+
     /**
      * @brief CircuitBreaker construct the Circuit breaker with the settings provided by user.
      * @param service Service which  processes the request
@@ -258,6 +258,7 @@ public:
      * @param failure_threshold the number of allowed failures in row before transitioning from CLOSED state
      * to OPEN state.
      */
+    /*
     explicit CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
      failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
 {
@@ -270,7 +271,7 @@ public:
     usage = 0;
     failure_threshold_reached = 0;
 }
-
+*/
 
     ~CircuitBreaker(){
         if(usage){

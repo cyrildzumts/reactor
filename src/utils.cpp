@@ -197,7 +197,7 @@ long TestRunner::run_cbreaker_test(data_t &data)
     retry_time = 100;
 #endif
     //using service_result_type = std::result_of_t<decltype (http_job)>();
-    CircuitBreaker<decltype(http_job),std::string> cb(duration_ms_t(deadline), duration_ms_t(retry_time),failures_threshold);
+    CircuitBreaker<decltype (http_job)> cb(http_job), duration_ms_t(deadline), duration_ms_t(retry_time),failures_threshold);
     cb.setPool(pool);
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
