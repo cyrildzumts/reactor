@@ -18,6 +18,20 @@
 constexpr int PERCENT_COUNT = 2;
 constexpr int REQUEST_COUNT = 3;
 
+using namespace std::chrono;
+using unit_ms = std::chrono::milliseconds;
+using unit_us = std::chrono::microseconds;
+
+
+#ifdef TIME_UNIT_MS
+    using duration_t = duration<unit_ms>;
+    using unit_t = unit_ms;
+#else
+    using duration_t = duration<unit_us>;
+    using unit_t = unit_us;
+#endif
+
+
 struct result_t{
     int request;
     int errors;
@@ -47,6 +61,7 @@ struct data_t{
 class TestRunner{
 private:
     std::shared_ptr<ThreadPool>pool;
+    bool is_direct_service_run;
     std::vector<std::vector<int>> errors_list;
     std::vector<std::vector<int>> success_list;
     std::vector<std::vector<int>> durations_list;
@@ -63,7 +78,7 @@ private:
     std::vector<std::vector<int>> delays_list;
     std::vector<std::vector<int>> deadline_list;
     std::vector<double> avarage;
-    std::vector<int> requests{1, 5, 10, 20, 50/*, 100, 200, 500, 1000, 2000, 5000, 10000, 100000, 1000000*/};
+    std::vector<int> requests{1, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 100000, 1000000};
     std::vector<double> percents{0.1,0.25, 0.5, 0.75,0.8,0.9, 1, 1.25, 1.5, 1.75, 2};
     //static constexpr std::array<double, PERCENT_COUNT> percents{0.1, 0.25};
     //static constexpr std::array<int, REQUEST_COUNT> requests{1, 5, 10};

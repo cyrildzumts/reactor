@@ -12,7 +12,7 @@
 #include <chrono>
 #include <future>
 #include <memory>
-#include <log.h> // my own developped Logger
+#include <log.h> // Logger
 
 /******************************************************************
  * Author : Cyrille Ngassam Nkwenga
@@ -36,11 +36,89 @@ private:
 
 };
 
+
+template<typename Callable, typename...Args>
+class Command2{
+public:
+    using result_type =std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
+    using function_type = std::decay_t<Callable>;
+
+//    Command2(function_type op) : fn{op}{
+
+//    }
+    Command2(Callable *op) : op{op}{
+
+    }
+
+    Command2(const Command2 &other){
+        this->fn = other.fn;
+    }
+    //Command &operator=(const Command& other) = default;
+
+    Command2(Command2&& other){
+        this->fn = other.fn;
+    }
+
+    Command2 &operator=(const Command2& other){
+        this->fn = other.fn;
+    }
+
+    Command2 &operator=(Command2&& other){
+        this->fn = other.fn;
+    }
+
+    decltype (auto) operator()(Args&&... args){
+      return std::invoke(std::forward<Callable>(op),std::forward<Args...>(args...));
+    }
+
+private:
+    function_type fn;
+    Callable *op;
+
+};
+
+
+template<typename R, typename...Args>
+class Command{
+public:
+    using result_type = std::decay_t<R>;
+    using function_type = R(*)(Args...);
+
+    Command(function_type op) : fn{op}{
+
+    }
+
+    Command(const Command &other){
+        this->fn = other.fn;
+    }
+    //Command &operator=(const Command& other) = default;
+
+    Command(Command&& other){
+        this->fn = other.fn;
+    }
+
+    Command &operator=(const Command& other){
+        this->fn = other.fn;
+    }
+
+    Command &operator=(Command&& other){
+        this->fn = other.fn;
+    }
+
+    result_type operator()(Args&&... args){
+        return fn(std::forward<Args>(args)...);
+    }
+
+private:
+    function_type fn;
+
+};
+
 enum class State {
     CLOSED, OPEN, HALF_OPEN
 };
 
-template<typename Callable, typename... Args>
+template<typename R, typename... Args>
 class CircuitBreaker
 {
 public:
@@ -49,12 +127,14 @@ public:
      * It help us to built the right std::future by using calling
      * std::future<result_type> to return the result of the request.
      */
-    using result_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
-    using task_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>(*)(std::decay_t<Args>...);
+    //using R =std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
+    //using result_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
+    //using task_type = std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>(*)(std::decay_t<Args>...);
 
 
 private:
-    task_type task;
+    Command<R, Args...> task;
+    //Command2<R, Args...> task;
     /**
      * @brief state this variable describe the current circuit breaker state
      */
@@ -136,12 +216,12 @@ private:
      * @param args The list of arguments that are to be forward to the service
      * @return a std::future containing the result of the request.
      */
-    std::future<result_type> onClosedState(Args&&... args){
-        std::promise<result_type> result_not_ready;
+    std::future<R> onClosedState(Args&&... args){
+        std::promise<R> result_not_ready;
 
-        std::future<result_type> result = result_not_ready.get_future();
-        std::future async_result = pool->submit(task, std::forward<Args>(args)...);
-        std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
+        std::future<R> result = result_not_ready.get_future();
+        std::future<R> async_result = pool->submit(task, std::forward<Args>(args)...);
+        std::future_status status = async_result.wait_for(deadline);
         if( status == std::future_status::ready){
             try {
                 result_not_ready.set_value(async_result.get());
@@ -174,16 +254,16 @@ private:
      * @param args The list of arguments that are to be forward to the service
      * @return a std::future containing the result of the request.
      */
-    std::future<result_type> onOpenState(Args&&... args){
+    std::future<R> onOpenState(Args&&... args){
         auto tmp = std::chrono::system_clock::now();
-    std::promise<result_type> error;
-    updateFailures();
-    auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - getFailure_time());
-    if( elapsed_time_duration >= getTime_to_retry()){
-        transition(State::HALF_OPEN);
-    }
-    error.set_exception(std::make_exception_ptr(ServiceError("SYSTEM NOW")));
-    return error.get_future();
+        std::promise<R> error;
+        updateFailures();
+        auto elapsed_time_duration =std::chrono::duration_cast<duration_ms_t>(tmp - getFailure_time());
+        if( elapsed_time_duration >= getTime_to_retry()){
+            transition(State::HALF_OPEN);
+        }
+        error.set_exception(std::make_exception_ptr(ServiceError("SYSTEM NOW")));
+        return error.get_future();
     }
 
     /**
@@ -191,11 +271,11 @@ private:
      * @param args The list of arguments that are to be forward to the service
      * @return a std::future containing the result of the request.
      */
-        std::future<result_type> onHalfOpenState(Args&&... args){
-        std::promise<result_type> result_not_ready;
-        std::future<result_type> result = result_not_ready.get_future();
-        std::future async_result = pool->submit(task, std::forward<Args>(args)...);
-        std::future_status status = async_result.wait_for(std::chrono::microseconds(deadline));
+    std::future<R> onHalfOpenState(Args&&... args){
+        std::promise<R> result_not_ready;
+        std::future<R> result = result_not_ready.get_future();
+        std::future<R> async_result = pool->submit(task, std::forward<Args>(args)...);
+        std::future_status status = async_result.wait_for(deadline);
         if( status == std::future_status::ready){
             try {
                 result_not_ready.set_value(async_result.get());
@@ -221,34 +301,34 @@ private:
      * @param state the new circuit state.
      */
     void transition(State state){
-         if(this->state != state){
-        this->state = state;
-        if(state == State::OPEN){
-            std::for_each(open_observers.begin(), open_observers.end(), [](FunctionWrapper &observer){
-                observer();
-            });
-        }else if(state == State::CLOSED){
-            std::for_each(closed_observers.begin(), closed_observers.end(), [](FunctionWrapper &observer){
-                observer();
-            });
+        if(this->state != state){
+            this->state = state;
+            if(state == State::OPEN){
+                std::for_each(open_observers.begin(), open_observers.end(), [](FunctionWrapper &observer){
+                    observer();
+                });
+            }else if(state == State::CLOSED){
+                std::for_each(closed_observers.begin(), closed_observers.end(), [](FunctionWrapper &observer){
+                    observer();
+                });
+            }
         }
-    }
     }
 public:
 
-    explicit CircuitBreaker(task_type task, duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
+    explicit CircuitBreaker(Command<R, Args...> task, duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
         task{task} ,failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
-{
+    {
 
-    ratio = 0.0;
-    ratio_trip = 0.0;
-    state = State::CLOSED;
-    failure_counter = 0;
-    failures = 0;
-    successes = 0;
-    usage = 0;
-    failure_threshold_reached = 0;
-}
+        ratio = 0.0;
+        ratio_trip = 0.0;
+        state = State::CLOSED;
+        failure_counter = 0;
+        failures = 0;
+        successes = 0;
+        usage = 0;
+        failure_threshold_reached = 0;
+    }
 
     /**
      * @brief CircuitBreaker construct the Circuit breaker with the settings provided by user.
@@ -258,34 +338,20 @@ public:
      * @param failure_threshold the number of allowed failures in row before transitioning from CLOSED state
      * to OPEN state.
      */
-    /*
-    explicit CircuitBreaker(duration_ms_t deadline, duration_ms_t time_to_retry, int failure_threshold):
-     failure_threshold{failure_threshold},time_to_retry{time_to_retry}, deadline{deadline}
-{
-    ratio = 0.0;
-    ratio_trip = 0.0;
-    state = State::CLOSED;
-    failure_counter = 0;
-    failures = 0;
-    successes = 0;
-    usage = 0;
-    failure_threshold_reached = 0;
-}
-*/
 
     ~CircuitBreaker(){
         if(usage){
-         ratio =100 * (static_cast<double>(successes)/usage);
-         ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage) * failure_threshold;
-     }
- #ifdef DEBUG_ON
-     LOG("usage summary :\tsuccess =\t", successes, ";\terror = ", failures,
-         ";\tusage : ",usage, ";\tdeadline(",TIME_UNIT,"): ",deadline.count(),
-         " Success RATIO(%):", ratio, " Number of trip :", failure_threshold_reached,
-         " Trip Ratio(%) :", ratio_trip);
-    LOG("CB THREAD POOL usage summary : ", "submitted tasks : ", pool->getSubmitted(), " finished tasks : ", pool->getFinishedTasks(), " still active : ", pool->getActiveTask());
-    
- #endif
+            ratio =100 * (static_cast<double>(successes)/usage);
+            ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage) * failure_threshold;
+        }
+#ifdef DEBUG_ON
+        LOG("usage summary :\tsuccess =\t", successes, ";\terror = ", failures,
+            ";\tusage : ",usage, ";\tdeadline(",TIME_UNIT,"): ",deadline.count(),
+            " Success RATIO(%):", ratio, " Number of trip :", failure_threshold_reached,
+            " Trip Ratio(%) :", ratio_trip);
+        LOG("CB THREAD POOL usage summary : ", "submitted tasks : ", pool->getSubmitted(), " finished tasks : ", pool->getFinishedTasks(), " still active : ", pool->getActiveTask());
+
+#endif
     }
 
     /**
@@ -296,8 +362,8 @@ public:
      */
     void trip(){
         failure_time = std::chrono::system_clock::now();
-    failure_counter = 0;
-    transition(State::OPEN);
+        failure_counter = 0;
+        transition(State::OPEN);
     }
     /**
      * @brief reset this method is called when the request succeed. AFter calling this
@@ -305,9 +371,9 @@ public:
      *
      */
     void reset(){
-         ++successes;
-    failure_counter = 0;
-    transition(State::CLOSED);
+        ++successes;
+        failure_counter = 0;
+        transition(State::CLOSED);
     }
     /**
      * @brief failure_count this method count the number of time the service has already failed.
@@ -329,9 +395,9 @@ public:
      * On failure the future contains an exception indicating the error.
      * These exception might be ServiceError or TimeoutError.
      */
-    std::future<result_type> execute(Args&&... args){
+    std::future<R> execute(Args&&... args){
         ++usage;
-        std::future<result_type> res;
+        std::future<R> res;
         if(state == State::CLOSED){
             res = onClosedState(std::forward<Args>(args)...);
         }
@@ -389,7 +455,7 @@ public:
      * Note II: The observer is run on the caller thread. The observer should note last long.
      */
     void addOnCircuitBreakClosedObserver(FunctionWrapper observer){
-         closed_observers.push_back(std::move(observer));
+        closed_observers.push_back(std::move(observer));
     }
     /**
      * @brief addOnCircuitBreakOpenObserver this method register observer which should be called everytime
@@ -428,11 +494,11 @@ public:
      */
     void updateFailures(){
         ++failure_counter;
-    ++failures;
-    if(failure_counter >= failure_threshold){
-        ++failure_threshold_reached;
-        failure_counter = 0;
-    }
+        ++failures;
+        if(failure_counter >= failure_threshold){
+            ++failure_threshold_reached;
+            failure_counter = 0;
+        }
     }
 
     /**
@@ -482,9 +548,9 @@ public:
      */
     void updateRatio(){
         if(usage){
-        ratio =100 * (static_cast<double>(successes)/usage);
-        ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage) * failure_threshold;
-    }
+            ratio =100 * (static_cast<double>(successes)/usage);
+            ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage) * failure_threshold;
+        }
     }
 
     /**
@@ -511,7 +577,7 @@ public:
      * circuit is not in the half-open state.
      */
     bool isHalfOpen() const{
-         return  state == State::HALF_OPEN;
+        return  state == State::HALF_OPEN;
     }
 
     /**
