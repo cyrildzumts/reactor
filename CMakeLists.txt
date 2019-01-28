@@ -75,7 +75,9 @@ set(BOOST_USE_MULTITHREAD ON)
 #set(BOOST_USE_STATIC_RUNTIME OFF)
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 if(Boost_FOUND)
-    message("Found Boost on this computer")
+
+    message("Found Boost  on this computer")
+
 
     include_directories(${Boost_INCLUDE_DIRS})
 
