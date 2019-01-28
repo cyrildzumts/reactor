@@ -78,7 +78,7 @@ private:
     std::vector<std::vector<int>> delays_list;
     std::vector<std::vector<int>> deadline_list;
     std::vector<double> avarage;
-    std::vector<int> requests{1, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 100000, 1000000};
+    std::vector<int> requests{1, 10, 50, 100, 500, 1000, 5000, 10000/*, 100000, 1000000*/};
     std::vector<double> percents{0.1,0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2};
     //static constexpr std::array<double, PERCENT_COUNT> percents{0.1, 0.25};
     //static constexpr std::array<int, REQUEST_COUNT> requests{1, 5, 10};

@@ -97,7 +97,7 @@ void TestRunner::run_test(int percent_index)
         durations_list.at(percent_index).push_back(data.duration);
         ratio_success_list.at(percent_index).push_back(data.ratio_success);
         ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
-        //std::this_thread::sleep_for(unit_t(10));
+        //std::this_thread::sleep_for(unit_t(50));
     }
 
 
@@ -110,6 +110,7 @@ void TestRunner::run_test(int percent_index)
             service_durations_list.at(percent_index).push_back(data.duration);
             service_ratio_success_list.at(percent_index).push_back(data.ratio_success);
             service_ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
+            //std::this_thread::sleep_for(unit_t(50));
         }
         is_direct_service_run = true;
     }
@@ -150,12 +151,13 @@ void TestRunner::run_test()
 
 long TestRunner::run_service_test(data_t &data)
 {
-    LOG("run Service test started ...");
+
     int request = requests[data.request_index];
     int deadline = deadline_list[data.deadline_list_index][data.request_index];
     int errors = 0;
     int success = 0;
     long duration = 0;
+    LOG("run Service test started with requests : ", request);
 #ifdef USE_REMOTE_SERVICE
     CURLcode res;
     auto start = std::chrono::system_clock::now();
@@ -195,7 +197,7 @@ long TestRunner::run_service_test(data_t &data)
     data.ratio_success = static_cast<double>(success)/request;
     data.ratio_trip = 0.0;
     data.percent = percents[data.deadline_list_index];
-    
+
     return duration;
 }
 
@@ -303,8 +305,8 @@ void TestRunner::save_result()
         file << "REQUEST \t Durations\t Errors\t Success\t Success Ratio(%)\t Trip Ratio(%)\n";
         file << "--------------------------------------------------------------\n";
         for(size_t j = 0; j < requests.size(); j++){
-            file << requests[j] <<"\t\t"<< durations_list[i][j] << "\t\t"
-                 << errors_list[i][j] << "\t\t" << success_list[i][j]<<"\t\t"<<ratio_success_list[i][j]<<"\t\t" <<ratio_trip_list[i][j] << "\n";
+            file << requests[j] <<"\t\t\t"<< durations_list[i][j] << "\t\t\t"
+                 << errors_list[i][j] << "\t\t\t" << success_list[i][j]<<"\t\t\t"<<ratio_success_list[i][j]<<"\t\t" <<ratio_trip_list[i][j] << "\n";
         }
         file << "--------------------------------------------------------------\n";
         file << "Summary : \n";
@@ -376,8 +378,8 @@ void TestRunner::save__service_result()
         file << "REQUEST \t Durations\t Errors\t Success\t Success Ratio(%)\t Trip Ratio(%)\n";
         file << "--------------------------------------------------------------\n";
         for(size_t j = 0; j < requests.size(); j++){
-            file << requests[j] <<"\t\t"<< service_durations_list[i][j] << "\t\t"
-                 << service_errors_list[i][j] << "\t\t" << service_success_list[i][j]<<"\t\t"<<service_ratio_success_list[i][j]<<"\t\t" <<service_ratio_trip_list[i][j] << "\n";
+            file << requests[j] <<"\t\t\t"<< service_durations_list[i][j] << "\t\t\t"
+                 << service_errors_list[i][j] << "\t\t\t" << service_success_list[i][j]<<"\t\t\t"<<service_ratio_success_list[i][j]<<"\t\t" <<service_ratio_trip_list[i][j] << "\n";
         }
         file << "--------------------------------------------------------------\n";
         file << "Summary : \n";
