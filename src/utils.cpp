@@ -1,12 +1,18 @@
 #include "utils.h"
 
 
+
 TestRunner::TestRunner()
 {
     LOG("TestRunner constructed ...");
+    is_direct_service_run = false;
     int request = 0;
     double avg = 0.0;
-    active = std::make_shared<concurrency::Active>();
+    std::optional<size_t> threading = std::nullopt;
+#ifdef MTHREADING
+    threading = MTHREADING;
+#endif
+    pool = std::make_shared<ThreadPool>(threading);
     for(size_t i = 0; i < requests.size(); i++){
         request = requests[i];
         delays_list.push_back(std::vector<int>());
@@ -86,40 +92,55 @@ void TestRunner::run_test(int percent_index)
     for(size_t i = 0; i < requests.size(); i++){
         data.request_index = i;
         duration = run_cbreaker_test(data);
-        //LOG("Circuit Breaker Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
-        //    " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
-        //LOG("Durarion : ", duration);
         errors_list.at(percent_index).push_back(data.errors);
         success_list.at(percent_index).push_back(data.success);
         durations_list.at(percent_index).push_back(data.duration);
+        ratio_success_list.at(percent_index).push_back(data.ratio_success);
+        ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
+        //std::this_thread::sleep_for(unit_t(10));
     }
 
 
-
-    for(size_t i = 0; i < requests.size(); i++){
-        data.request_index = i;
-        duration = run_service_test(data);
-        //LOG("ervice Test results : ", "duration : ", data.duration, "; errors : ", data.errors, "; success : ", data.success,
-        //    " ; deadline : ", data.deadline, "; request : ", data.request, "; percent : ", data.percent);
-        //LOG("Durarion : ", duration);
-        service_errors_list.at(percent_index).push_back(data.errors);
-        service_success_list.at(percent_index).push_back(data.success);
-        service_durations_list.at(percent_index).push_back(data.duration);
+    if(!is_direct_service_run){
+        for(size_t i = 0; i < requests.size(); i++){
+            data.request_index = i;
+            duration = run_service_test(data);
+            service_errors_list.at(percent_index).push_back(data.errors);
+            service_success_list.at(percent_index).push_back(data.success);
+            service_durations_list.at(percent_index).push_back(data.duration);
+            service_ratio_success_list.at(percent_index).push_back(data.ratio_success);
+            service_ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
+        }
+        is_direct_service_run = true;
     }
+//    for(size_t i = 0; i < requests.size(); i++){
+//        data.request_index = i;
+//        duration = run_service_test(data);
+//        service_errors_list.at(percent_index).push_back(data.errors);
+//        service_success_list.at(percent_index).push_back(data.success);
+//        service_durations_list.at(percent_index).push_back(data.duration);
+//        service_ratio_success_list.at(percent_index).push_back(data.ratio_success);
+//        service_ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
+//    }
+
+    //LOG("TEST with percent ", percents.at(percent_index), " ratio success : ", data.ratio_success, " ratio trip : ", data.ratio_trip);
 }
 
 void TestRunner::run_test()
 {
     LOG("Running Test started ...");
+    service_errors_list.push_back(std::vector<int>());
+    service_success_list.push_back(std::vector<int>());
+    service_durations_list.push_back(std::vector<int>());
+    service_ratio_success_list.push_back(std::vector<double>());
+    service_ratio_trip_list.push_back(std::vector<double>());
+
     for(size_t i = 0; i < percents.size(); i++){
         errors_list.push_back(std::vector<int>());
         success_list.push_back(std::vector<int>());
         durations_list.push_back(std::vector<int>());
-
-        service_errors_list.push_back(std::vector<int>());
-        service_success_list.push_back(std::vector<int>());
-        service_durations_list.push_back(std::vector<int>());
-
+        ratio_success_list.push_back(std::vector<double>());
+        ratio_trip_list.push_back(std::vector<double>());
         run_test(i);
         LOG("Running Test finished");
     }
@@ -129,69 +150,123 @@ void TestRunner::run_test()
 
 long TestRunner::run_service_test(data_t &data)
 {
-    //LOG("run Service test started ...");
+    LOG("run Service test started ...");
     int request = requests[data.request_index];
     int deadline = deadline_list[data.deadline_list_index][data.request_index];
     int errors = 0;
     int success = 0;
     long duration = 0;
-    int ret = 0;
-    std::unique_ptr<Service> service = std::make_unique<ConcreteService>();
+#ifdef USE_REMOTE_SERVICE
+    CURLcode res;
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
-            ret = service->process_request(request, delays_list[data.request_index][i] );
-            if(ret <= deadline){
+
+                std::future<CURLcode> cod = pool->submit(http_job,URL_2);
+                res = cod.get();
                 success++;
-            }
-            else{
-                errors++;
-            }
         } catch (...) {
             errors++;
         }
     }
     auto end = std::chrono::system_clock::now() - start;
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end).count();
+    duration = std::chrono::duration_cast<unit_t>(end).count();
+#else
+    int res = 0;
+    auto start = std::chrono::system_clock::now();
+    for(size_t i = 0; i < request; i++){
+        try {
+
+                std::future<int> cod = pool->submit(job,i,delays_list.at(data.request_index).at(i));
+                res = cod.get();
+                success++;
+        } catch (...) {
+            errors++;
+        }
+    }
+    auto end = std::chrono::system_clock::now() - start;
+    duration = std::chrono::duration_cast<unit_t>(end).count();
+#endif
     data.errors = errors;
     data.success = success;
     data.duration = duration;
     data.deadline = deadline;
     data.request = request;
+    data.ratio_success = static_cast<double>(success)/request;
+    data.ratio_trip = 0.0;
     data.percent = percents[data.deadline_list_index];
-    //LOG("run Service test finished ... : duration : ", data.duration, " duration 2 : ", duration);
+    
     return duration;
 }
 
 long TestRunner::run_cbreaker_test(data_t &data)
 {
-    //LOG("run cbreaker test started ...");
+    LOG("run cbreaker test started ...");
     int request = requests[data.request_index];
     int deadline = deadline_list[data.deadline_list_index][data.request_index];
     int errors = 0;
     int success = 0;
     long duration = 0;
-    std::string header;
-    CircuitBreaker cb(duration_ms_t(deadline), duration_ms_t(100), 5 );
-    cb.setActive(active); // set the Active Object which provides a thread execution unit
+    int failures_threshold = 0;
+    int retry_time = 0;
+#ifdef FAILURES_THRESHOLD
+    failures_threshold = FAILURES_THRESHOLD;
+#else
+    failures_threshold = 3;
+#endif
+
+#ifdef RETRY_TIMEOUT
+    retry_time = RETRY_TIMEOUT;
+#else
+    retry_time = 100;
+#endif
+#ifdef USE_REMOTE_SERVICE
+    CURLcode res;
+    Command service{http_job};
+    CircuitBreaker cb(service, unit_t(deadline), unit_t(retry_time),failures_threshold);
+    cb.setPool(pool);
     auto start = std::chrono::system_clock::now();
     for(size_t i = 0; i < request; i++){
         try {
-            cb.process_request(request, delays_list.at(data.request_index).at(i) );
-            success++;
+
+                std::future<CURLcode> cod = cb.execute(URL_2);
+                res = cod.get();
+                success++;
         } catch (...) {
             errors++;
         }
     }
     auto end = std::chrono::system_clock::now() - start;
-    duration = std::chrono::duration_cast<std::chrono::microseconds>(end).count();
+    duration = std::chrono::duration_cast<unit_t>(end).count();
+#else
+    int res = 0;
+    Command service{job};
+    CircuitBreaker cb(service, unit_t(deadline), unit_t(retry_time),failures_threshold);
+    cb.setPool(pool);
+    auto start = std::chrono::system_clock::now();
+    for(size_t i = 0; i < request; i++){
+        try {
+
+                std::future<int> cod = cb.execute(i,delays_list.at(data.request_index).at(i));
+                res = cod.get();
+                success++;
+        } catch (...) {
+            errors++;
+        }
+    }
+    auto end = std::chrono::system_clock::now() - start;
+    duration = std::chrono::duration_cast<unit_t>(end).count();
+#endif
     data.errors = errors;
     data.success = success;
     data.duration = duration;
     data.deadline = deadline;
     data.request = request;
+    data.trips = cb.getFailure_threshold_reached();
+    data.ratio_success = cb.getRatio();
+    data.ratio_trip = cb.getRatio_trip();
     data.percent = percents[data.deadline_list_index];
-    //LOG("run cbreaker test finished ... : duration : ", data.duration);
+    //LOG("TEST with percent ", data.percent, " ratio success : ", data.ratio_success, " ratio trip : ", data.ratio_trip, " trips : ", data.trips);
     return duration;
 }
 
@@ -199,7 +274,13 @@ long TestRunner::run_cbreaker_test(data_t &data)
 
 void TestRunner::save_result()
 {
+
+
+#ifdef LOG_FILENAME
+    std::string filename = std::string(LOG_FILENAME);
+#else
     std::string filename = "log/circuit_breaker.txt";
+#endif
     std::ios_base::openmode mode = std::fstream::app|std::fstream::in|std::fstream::out;
     std::fstream file(filename, mode);
     if(!file.is_open()){
@@ -219,11 +300,11 @@ void TestRunner::save_result()
     for(size_t i = 0; i < percents.size(); i++){
         file << "TestRunner Circuit Breaker run for PERCENTAGE :  " << percents[i] * 100  << "% \n";
         file << "--------------------------------------------------------------\n";
-        file << "REQUEST \t Durations\t Errors\t Success\t\n";
+        file << "REQUEST \t Durations\t Errors\t Success\t Success Ratio(%)\t Trip Ratio(%)\n";
         file << "--------------------------------------------------------------\n";
         for(size_t j = 0; j < requests.size(); j++){
             file << requests[j] <<"\t\t"<< durations_list[i][j] << "\t\t"
-                 << errors_list[i][j] << "\t\t" << success_list[i][j] << "\t\n";
+                 << errors_list[i][j] << "\t\t" << success_list[i][j]<<"\t\t"<<ratio_success_list[i][j]<<"\t\t" <<ratio_trip_list[i][j] << "\n";
         }
         file << "--------------------------------------------------------------\n";
         file << "Summary : \n";
@@ -248,6 +329,17 @@ void TestRunner::save_result()
             file << element << " ";
         });
         file << " ]\n";
+        file << "ratio_success   \t= [ ";
+        std::for_each(ratio_success_list[i].begin(), ratio_success_list[i].end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
+
+        file << "ratio_trip   \t= [ ";
+        std::for_each(ratio_trip_list[i].begin(), ratio_trip_list[i].end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
 
     }
     file << "--------------------------------------------------------------\n";
@@ -257,7 +349,11 @@ void TestRunner::save_result()
 
 void TestRunner::save__service_result()
 {
+#ifdef LOG_FILENAME
+    std::string filename = std::string(LOG_FILENAME_SERVICE);
+#else
     std::string filename = "log/service.txt";
+#endif
     std::ios_base::openmode mode = std::fstream::app|std::fstream::in|std::fstream::out;
     std::fstream file(filename, mode);
     if(!file.is_open()){
@@ -277,11 +373,11 @@ void TestRunner::save__service_result()
     for(size_t i = 0; i < percents.size(); i++){
         file << "TestRunner Service run for PERCENTAGE :  " << percents[i] * 100  << "% \n";
         file << "--------------------------------------------------------------\n";
-        file << "REQUEST \t Durations\t Errors\t Success\t\n";
+        file << "REQUEST \t Durations\t Errors\t Success\t Success Ratio(%)\t Trip Ratio(%)\n";
         file << "--------------------------------------------------------------\n";
         for(size_t j = 0; j < requests.size(); j++){
             file << requests[j] <<"\t\t"<< service_durations_list[i][j] << "\t\t"
-                 << service_errors_list[i][j] << "\t\t" << service_success_list[i][j] << "\t\n";
+                 << service_errors_list[i][j] << "\t\t" << service_success_list[i][j]<<"\t\t"<<service_ratio_success_list[i][j]<<"\t\t" <<service_ratio_trip_list[i][j] << "\n";
         }
         file << "--------------------------------------------------------------\n";
         file << "Summary : \n";
@@ -306,6 +402,19 @@ void TestRunner::save__service_result()
             file << element << " ";
         });
         file << " ]\n";
+
+        file << "ratio_success   \t= [ ";
+        std::for_each(service_ratio_success_list[i].begin(), service_ratio_success_list[i].end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
+
+        file << "ratio_trip   \t= [ ";
+        std::for_each(service_ratio_trip_list[i].begin(), service_ratio_trip_list[i].end(), [&](int element){
+            file << element << " ";
+        });
+        file << " ]\n";
+        break;
 
     }
     file << "--------------------------------------------------------------\n";

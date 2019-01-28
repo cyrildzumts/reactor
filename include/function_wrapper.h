@@ -18,6 +18,11 @@ decltype (auto) call_callable(Callable &&op, Args&&... args){
 }
 
 
+/**
+ * @brief The FunctionWrapper class a function wrapper used to generalized the functor object.
+ * this class is need since std::function is copyable , not movable. It is needed so that when
+ * used with a std::package_task ( which is only movable) the move action will be possible.
+ */
 class FunctionWrapper{
 private:
     struct impl_base{

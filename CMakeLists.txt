@@ -12,21 +12,64 @@ if(${CMAKE_VERSION} VERSION_LESS 3.8)
 else()
     message("your current CMake version support C++ 17")
     set (CMAKE_CXX_STANDARD 17)
-#    find_package(Threads REQUIRED)
-#    if(Threads_FOUND)
-#       message("Found Threads library")
-#        message("Thread Include dir : " ${Threads_INCLUDE_DIR})
-#        message("Thread libraries : ${Threads_LIBRARIES}" )
-#    endif()
      set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 endif()
 
 
-message("Welcome to Reactor Project" )
+# create macros that will be passed C/C++ code. utils.cpp and service.cpp rely on those macros
+# to choose the 
+OPTION(DEBUG_ON "Option to activate debug output from code" OFF)
+SET(PROCESSING_DURATION CACHE STRING "Define the maximale processing time needed by the task job")
+SET(FAILURES_THRESHOLD CACHE STRING "SELECT value for the FAILURES_THRESHOLD flag")
+SET(RETRY_TIMEOUT CACHE STRING "Select the value to use for Retry when the Circuit breaker is open")
+OPTION(TIME_UNIT_MS OFF "Select the time unit to be used in the project")
+OPTION(MTHREADING OFF "Select the number of thread used by the circuit breaker" )
+OPTION(USE_REMOTE_SERVICE ON "Select the number of thread used by the circuit breaker" )
+
+set_property(CACHE PROCESSING_DURATION PROPERTY STRINGS
+    30 50 100 150 200
+    )
+set_property(CACHE FAILURES_THRESHOLD PROPERTY STRINGS
+    3 10 15
+    )
+set_property(CACHE RETRY_TIMEOUT PROPERTY STRINGS
+    10 30 100 150
+    )
+set_property(CACHE MTHREADING PROPERTY STRINGS
+    1 2 4 8 16
+    )
+
+if(TIME_UNIT_MS)
+    set(TIME_UNIT "ms")
+else()
+    set(TIME_UNIT "us")
+endif()
+set(LOG_DIR ${PROJECT_BINARY_DIR}/log)
+file(MAKE_DIRECTORY ${LOG_DIR})
+if(DEBUG_ON)
+    message("Adding DEBUG_ON macro definition")
+    #add_definitions(-DDEBUG_ON)
+    #add_definitions(-DFAILURES_THRESHOLD)
+    #add_definitions(-DRETRY_TIMEOUT)
+    #add_definitions(-DTIME_UNIT_MS)
+    set(LOG_PREFIX "Circuitbreaker")
+
+    configure_file(
+        ${PROJECT_SOURCE_DIR}/include/config.h.in
+        ${PROJECT_BINARY_DIR}/config.h
+        )
+    include_directories(${PROJECT_BINARY_DIR})
+
+else()
+    message("DEBUG_ON macro definition not added")
+endif(DEBUG_ON)
+message("Welcome to Reactor" )
 message("CMAKE version in use : ${CMAKE_VERSION}")
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} include)
 # set the path where cmake would look for cmake module
+set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+
+set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} include)
+
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR})
 set(TARGET Reactor)
 set(TEST_TARGET Test)
@@ -45,12 +88,8 @@ file (GLOB REACTOR_SOURCES "${SOURCE_DIR}/*.cpp" "${SOURCE_DIR}/include/*.h")
 file( GLOB SOURCES "src/*.cpp" "include/*.h")
 set(TEST_SOURCES ${SOURCES})
 list(REMOVE_ITEM TEST_SOURCES ${PROJECT_SOURCE_DIR}/src/main.cpp)
+list(REMOVE_ITEM TEST_SOURCES ${PROJECT_SOURCE_DIR}/src/mainbak.cpp)
 
-
-# process the CMake subdirectory
-#add_subdirectory(CMake)
-#include and process the commands in CMake/FindCAF.cmake
-#set CAF root directory
 set(USE_LOGGER ON)
 set(TEST_LIBS " ")
 if(USE_LOGGER)
@@ -69,44 +108,36 @@ if(USE_LOGGER)
     option(USE_LOGGER "Use Logger Capabilities provided by Logger Lib" ON)
 endif()
 
+#add libcurl
+set(CURL_LIBRARY "-lcurl")
+find_package(CURL REQUIRED)
+include_directories(${CURL_INCLUDE_DIR})
+message("CULR lib : ${CURL_LIBRARIES}")
+
 
 #set(BOOST_USE_STATIC_LIBS OFF)
 set(BOOST_USE_MULTITHREAD ON)
 #set(BOOST_USE_STATIC_RUNTIME OFF)
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 if(Boost_FOUND)
-
-    message("Found Boost  on this computer")
-
-
     include_directories(${Boost_INCLUDE_DIRS})
-
-    #message(status "** Boost Root : ${Boost_BOOSTROOT}")
-    #message(status "** Boost INCLUDE_DIRECTORIES : ${Boost_INCLUDE_DIRS}")
-    #message(status "** Boost library to be linked : ${Boost_LIBRARIES}")
-    #message(status "** Boost unit test libs 1 : ${Boost_LIBRARY_DIRS}")
-    #message(status "** Boost unit test libs 2: ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY}")
     #LINK_DIRECTORIES(${Boost_LIBRARY_DIRS})
 endif()
 
 
 add_executable (${TARGET} ${SOURCES} "src/main.cpp")
-target_link_libraries(${TARGET} ${Logger_LIBRARY})
+target_link_libraries(${TARGET} ${Logger_LIBRARY} ${CURL_LIBRARIES})
 
-
-add_executable(${TEST_TARGET} tests/main.cpp )
+# add test executable 
+add_executable(${TEST_TARGET} ${TEST_SOURCES} tests/main.cpp )
 #target_link_libraries(${TEST_TARGET} ${TEST_LIBS})
-target_link_libraries(${TEST_TARGET} ${Logger_LIBRARY} Boost::unit_test_framework)
-#target_include_directories(${TEST_TARGET} PUBLIC ${Boost_INCLUDE_DIRS})
+target_link_libraries(${TEST_TARGET} ${CURL_LIBRARIES} ${Logger_LIBRARY} Boost::unit_test_framework)
+target_include_directories(${TEST_TARGET} PUBLIC ${Boost_INCLUDE_DIRS})
+# pass automatically macro needed by Boost to choose the link option
 target_compile_definitions(${TEST_TARGET} PRIVATE "BOOST_TEST_DYN_LINK=1")
-#target_link_libraries(${TEST_TARGET} ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
+
+
+# tell CMake to generate Test command. This allow us to run ctest in the binary dir
+# to execute all our registered tests.
 add_test(NAME unit_test1 COMMAND ${TEST_TARGET})
-# look for the C++ CAF library
 
-
-#include (GetPrerequisites)
-#get_prerequisites(${TARGET} DEPS 0 0 "" "")
-#message("${TARGET} DEPENDS on : ")
-#foreach(DEP ${DEPS})
-#    message(${DEP})
-#endforeach()

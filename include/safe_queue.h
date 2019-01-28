@@ -5,6 +5,15 @@
 #include <memory>
 #include <condition_variable>
 
+/*********************************************************
+ * Author: Cyrille Ngassam Nkwenga
+ * 2019
+ * Desciption : This class implements a thread safe queue
+ * which can be used in a multhreading environment.
+ * This Queue accept any movable object
+********************************************************/
+
+
 template <typename T>
     class ThreadSafeQueue
     {
@@ -48,6 +57,10 @@ template <typename T>
 
         }
 
+        /**
+         * @brief push pushes item into the queue
+         * @param item the element to be pushed into the queue
+         */
         void push(T item)
         {
             std::lock_guard<std::mutex>locker(itemMutex);
@@ -55,6 +68,11 @@ template <typename T>
             itemCond.notify_one();
         }
 
+        /**
+         * @brief wait_and_pop takes the last insert item from the queue.
+         *
+         * @param item contains the removed element
+         */
         void wait_and_pop(T& item)
         {
             std::unique_lock<std::mutex> locker(itemMutex);
@@ -63,6 +81,10 @@ template <typename T>
             items.pop();
         }
 
+        /**
+         * @brief wait_and_pop takes the last insert item from the queue.
+         * @return handle to the removed element
+         */
         std::shared_ptr<T> wait_and_pop()
         {
             std::unique_lock<std::mutex> locker(itemMutex);
@@ -72,6 +94,12 @@ template <typename T>
             return result;
         }
 
+        /**
+         * @brief try_pop non blocking removing method. this method try to remove
+         * the last inserted element from the queue.
+         * @param item contains the removed inserted element.
+         * @return true on success. False is returned when the queue is empty.
+         */
         bool try_pop(T& item)
         {
             std::lock_guard<std::mutex> locker(itemMutex);
@@ -82,6 +110,13 @@ template <typename T>
             return true;
         }
 
+        /**
+         * @brief try_pop non blocking removing method. this method try to remove
+         * the last inserted element from the queue.
+         *
+         * @return handle to the removed element when the queue is not empty.
+         * returns an invalid pointer when the queue is empty.
+         */
         std::shared_ptr<T> try_pop()
         {
             std::lock_guard<std::mutex> locker(itemMutex);
@@ -92,24 +127,31 @@ template <typename T>
             return result;
         }
 
+        /**
+         * @brief empty checks whether the queue is empty
+         * @return true when the queue is empty, else false is returned.
+         */
         bool empty()const
         {
             std::lock_guard<std::mutex> locker(itemMutex);
             return items.empty();
         }
 
+        /**
+         * @brief size get the current size of the queue.
+         * @return the size of the queue
+         */
         int size()const
         {
             return items.size();
         }
 
+        /**
+         * @brief clear clears the queue's content.
+         */
         void clear()
         {
             items = {};
-        }
-        std::queue<T> getContainer()
-        {
-            return items;
         }
 
     private:

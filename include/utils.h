@@ -3,6 +3,7 @@
 
 #include "circuitbreaker.h"
 #include "generator.h"
+#include <thread>
 #include <chrono>
 #include <vector>
 #include <string>
@@ -13,19 +14,23 @@
 #include <cmath>
 #include <algorithm>
 
-#define WAIT_10_PER_CENT 0.1
-#define WAIT_25_PER_CENT 0.25
-#define WAIT_50_PER_CENT 0.5
-#define WAIT_75_PER_CENT 0.75
-#define WAIT_100_PER_CENT 1
-
-#define WAIT_125_PER_CENT 1.25
-#define WAIT_150_PER_CENT 1.5
-#define WAIT_175_PER_CENT 1.75
-#define WAIT_200_PER_CENT 2
 
 constexpr int PERCENT_COUNT = 2;
 constexpr int REQUEST_COUNT = 3;
+
+using namespace std::chrono;
+using unit_ms = std::chrono::milliseconds;
+using unit_us = std::chrono::microseconds;
+
+
+#ifdef TIME_UNIT_MS
+    using duration_t = duration<unit_ms>;
+    using unit_t = unit_ms;
+#else
+    using duration_t = duration<unit_us>;
+    using unit_t = unit_us;
+#endif
+
 
 struct result_t{
     int request;
@@ -44,7 +49,10 @@ struct data_t{
     int success;
     int deadline;
     long duration;
+    long trips ;
     double percent;
+    double ratio_success;
+    double ratio_trip;
 };
 
 
@@ -52,15 +60,19 @@ struct data_t{
 
 class TestRunner{
 private:
-    std::shared_ptr<concurrency::Active> active;
-    ConcreteService service;
+    std::shared_ptr<ThreadPool>pool;
+    bool is_direct_service_run;
     std::vector<std::vector<int>> errors_list;
     std::vector<std::vector<int>> success_list;
     std::vector<std::vector<int>> durations_list;
+    std::vector<std::vector<double>> ratio_success_list;
+    std::vector<std::vector<double>> ratio_trip_list;
 
     std::vector<std::vector<int>> service_errors_list;
     std::vector<std::vector<int>> service_success_list;
     std::vector<std::vector<int>> service_durations_list;
+    std::vector<std::vector<double>> service_ratio_success_list;
+    std::vector<std::vector<double>> service_ratio_trip_list;
 
 
     std::vector<std::vector<int>> delays_list;
