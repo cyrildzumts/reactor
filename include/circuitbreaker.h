@@ -37,47 +37,6 @@ private:
 };
 
 
-template<typename Callable, typename...Args>
-class Command2{
-public:
-    using result_type =std::invoke_result_t<std::decay_t<Callable>, std::decay_t<Args>...>;
-    using function_type = std::decay_t<Callable>;
-
-//    Command2(function_type op) : fn{op}{
-
-//    }
-    Command2(Callable *op) : op{op}{
-
-    }
-
-    Command2(const Command2 &other){
-        this->fn = other.fn;
-    }
-    //Command &operator=(const Command& other) = default;
-
-    Command2(Command2&& other){
-        this->fn = other.fn;
-    }
-
-    Command2 &operator=(const Command2& other){
-        this->fn = other.fn;
-    }
-
-    Command2 &operator=(Command2&& other){
-        this->fn = other.fn;
-    }
-
-    decltype (auto) operator()(Args&&... args){
-      return std::invoke(std::forward<Callable>(op),std::forward<Args...>(args...));
-    }
-
-private:
-    function_type fn;
-    Callable *op;
-
-};
-
-
 template<typename R, typename...Args>
 class Command{
 public:

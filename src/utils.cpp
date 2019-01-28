@@ -97,31 +97,31 @@ void TestRunner::run_test(int percent_index)
         durations_list.at(percent_index).push_back(data.duration);
         ratio_success_list.at(percent_index).push_back(data.ratio_success);
         ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
-        //std::this_thread::sleep_for(duration_ms_t(1));
+        //std::this_thread::sleep_for(unit_t(10));
     }
 
 
-//    if(!is_direct_service_run){
-//        for(size_t i = 0; i < requests.size(); i++){
-//            data.request_index = i;
-//            duration = run_service_test(data);
-//            service_errors_list.at(percent_index).push_back(data.errors);
-//            service_success_list.at(percent_index).push_back(data.success);
-//            service_durations_list.at(percent_index).push_back(data.duration);
-//            service_ratio_success_list.at(percent_index).push_back(data.ratio_success);
-//            service_ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
-//        }
-//        is_direct_service_run = true;
+    if(!is_direct_service_run){
+        for(size_t i = 0; i < requests.size(); i++){
+            data.request_index = i;
+            duration = run_service_test(data);
+            service_errors_list.at(percent_index).push_back(data.errors);
+            service_success_list.at(percent_index).push_back(data.success);
+            service_durations_list.at(percent_index).push_back(data.duration);
+            service_ratio_success_list.at(percent_index).push_back(data.ratio_success);
+            service_ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
+        }
+        is_direct_service_run = true;
+    }
+//    for(size_t i = 0; i < requests.size(); i++){
+//        data.request_index = i;
+//        duration = run_service_test(data);
+//        service_errors_list.at(percent_index).push_back(data.errors);
+//        service_success_list.at(percent_index).push_back(data.success);
+//        service_durations_list.at(percent_index).push_back(data.duration);
+//        service_ratio_success_list.at(percent_index).push_back(data.ratio_success);
+//        service_ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
 //    }
-    for(size_t i = 0; i < requests.size(); i++){
-        data.request_index = i;
-        duration = run_service_test(data);
-        service_errors_list.at(percent_index).push_back(data.errors);
-        service_success_list.at(percent_index).push_back(data.success);
-        service_durations_list.at(percent_index).push_back(data.duration);
-        service_ratio_success_list.at(percent_index).push_back(data.ratio_success);
-        service_ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
-    }
 
     //LOG("TEST with percent ", percents.at(percent_index), " ratio success : ", data.ratio_success, " ratio trip : ", data.ratio_trip);
 }
@@ -414,7 +414,7 @@ void TestRunner::save__service_result()
             file << element << " ";
         });
         file << " ]\n";
-        //break;
+        break;
 
     }
     file << "--------------------------------------------------------------\n";
