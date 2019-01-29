@@ -97,7 +97,7 @@ void TestRunner::run_test(int percent_index)
         durations_list.at(percent_index).push_back(data.duration);
         ratio_success_list.at(percent_index).push_back(data.ratio_success);
         ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
-        //std::this_thread::sleep_for(unit_t(50));
+        std::this_thread::sleep_for(unit_t(300));
     }
 
 
@@ -110,7 +110,7 @@ void TestRunner::run_test(int percent_index)
             service_durations_list.at(percent_index).push_back(data.duration);
             service_ratio_success_list.at(percent_index).push_back(data.ratio_success);
             service_ratio_trip_list.at(percent_index).push_back(data.ratio_trip);
-            //std::this_thread::sleep_for(unit_t(50));
+            std::this_thread::sleep_for(unit_t(300));
         }
         is_direct_service_run = true;
     }
