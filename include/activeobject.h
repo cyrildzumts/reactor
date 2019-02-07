@@ -5,7 +5,6 @@
 
 #include "function_wrapper.h"
 #include "safe_queue.h"
-#include <log.h>
 #include <atomic>
 #include <future>
 #include <thread>

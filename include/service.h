@@ -3,7 +3,6 @@
 #define SERVICE_H
 
 #include "common.h"
-#include <log.h>
 #include <exception>
 #include <curl/curl.h>
 #include <utility>
@@ -12,9 +11,12 @@
 #include <string>
 #include <cstring>
 
-#define URL_1 "http://www.mocky.io/v2/5c404307350000b02dec3c0e/?mocky-delay=500ms" // receive 21 Bytes
-#define URL_2 "http://www.mocky.io/v2/5c405ffe0f00007408e7b3f9/?mocky-delay=500ms" // receive 52 Bytes
-#define URL_3 "http://slowwly.robertomurray.co.uk/delay/500/url/https://example.com/" //receive 1270 Bytes
+#ifndef URL
+    #define URL_1 "http://www.mocky.io/v2/5c404307350000b02dec3c0e/?mocky-delay=500ms" // receive 21 Bytes
+    #define URL_2 "http://www.mocky.io/v2/5c405ffe0f00007408e7b3f9/?mocky-delay=500ms" // receive 52 Bytes
+    #define URL_3 "http://slowwly.robertomurray.co.uk/delay/500/url/https://example.com/" //receive 1270 Bytes
+    #define URL_4 "https://example.com" //receive 1270 Bytes
+#endif
 
 template<typename Callback, typename... Args>
 struct typeof_t{

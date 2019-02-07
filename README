@@ -1,8 +1,6 @@
-A full Description of the work going on here is coming.
-This project is using C++17.
-I building it using GCC 7.3 on Ubuntu 16.04
-
+This repository contains an implementation of the circuit breaker pattern in C++.
+This work is a part of my bachelor thesis at the HAW Hamburg university.
 
 
 Cyrille Ngassam Nkwenga
-HAW Hamburg 2018-2019
+HAW Hamburg 2019

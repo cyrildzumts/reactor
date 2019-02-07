@@ -15,6 +15,10 @@ else()
      set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread")
 endif()
 
+# those url are used by the service.cpp for testing.
+set(URL_1 "http://www.mocky.io/v2/5c405ffe0f00007408e7b3f9/?mocky-delay=500ms")
+set(URL_2 "https://example.com")
+set(URL_3 "https://reqres.in/api/users")
 
 # create macros that will be passed C/C++ code. utils.cpp and service.cpp rely on those macros
 # to choose the 
@@ -25,6 +29,7 @@ SET(RETRY_TIMEOUT CACHE STRING "Select the value to use for Retry when the Circu
 OPTION(TIME_UNIT_MS OFF "Select the time unit to be used in the project")
 OPTION(MTHREADING OFF "Select the number of thread used by the circuit breaker" )
 OPTION(USE_REMOTE_SERVICE ON "Select the number of thread used by the circuit breaker" )
+SET(URL OFF CACHE STRING "Define the url to be used for remote call when testing.")
 
 set_property(CACHE PROCESSING_DURATION PROPERTY STRINGS
     30 50 100 150 200
@@ -39,6 +44,28 @@ set_property(CACHE MTHREADING PROPERTY STRINGS
     1 2 4 8 16
     )
 
+if(USE_REMOTE_SERVICE)
+    set(TEST_TYPE "webservice")
+else()
+    set(TEST_TYPE "sim")
+endif()
+
+if(URL)
+    message("URL defined to ${URL}")
+    set(URL "${${URL}}")
+else()
+    message("URL not set. Default URL_2 will be used as default")
+    set(URL ${URL_2})
+    #add_definitions(-DURL=${URL})
+
+endif()
+#add_definitions(-DURL=${URL})
+add_definitions(-DURL_1=${URL_1})
+add_definitions(-DURL_2=${URL_2})
+add_definitions(-DURL_3=${URL_3})
+add_definitions(-DURL_4=${URL_4})
+
+
 if(TIME_UNIT_MS)
     set(TIME_UNIT "ms")
 else()
@@ -52,17 +79,17 @@ if(DEBUG_ON)
     #add_definitions(-DFAILURES_THRESHOLD)
     #add_definitions(-DRETRY_TIMEOUT)
     #add_definitions(-DTIME_UNIT_MS)
-    set(LOG_PREFIX "Circuitbreaker")
-
-    configure_file(
-        ${PROJECT_SOURCE_DIR}/include/config.h.in
-        ${PROJECT_BINARY_DIR}/config.h
-        )
-    include_directories(${PROJECT_BINARY_DIR})
 
 else()
     message("DEBUG_ON macro definition not added")
 endif(DEBUG_ON)
+set(LOG_PREFIX "Circuitbreaker")
+
+configure_file(
+    ${PROJECT_SOURCE_DIR}/include/config.h.in
+    ${PROJECT_BINARY_DIR}/config.h
+    )
+include_directories(${PROJECT_BINARY_DIR})
 message("Welcome to Reactor" )
 message("CMAKE version in use : ${CMAKE_VERSION}")
 # set the path where cmake would look for cmake module
@@ -86,6 +113,7 @@ file(GLOB_RECURSE REACTOR_HEADERS "${SOURCE_DIR}/include/*.h")
 file (GLOB REACTOR_SOURCES "${SOURCE_DIR}/*.cpp" "${SOURCE_DIR}/include/*.h")
 #set(SOURCES ${REACTOR_SOURCES})
 file( GLOB SOURCES "src/*.cpp" "include/*.h")
+list(REMOVE_ITEM SOURCES ${PROJECT_SOURCE_DIR}/src/mainbak.cpp)
 set(TEST_SOURCES ${SOURCES})
 list(REMOVE_ITEM TEST_SOURCES ${PROJECT_SOURCE_DIR}/src/main.cpp)
 list(REMOVE_ITEM TEST_SOURCES ${PROJECT_SOURCE_DIR}/src/mainbak.cpp)

@@ -1,6 +1,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include "common.h"
 #include "circuitbreaker.h"
 #include "generator.h"
 #include <thread>
@@ -15,9 +16,6 @@
 #include <algorithm>
 
 
-constexpr int PERCENT_COUNT = 2;
-constexpr int REQUEST_COUNT = 3;
-
 using namespace std::chrono;
 using unit_ms = std::chrono::milliseconds;
 using unit_us = std::chrono::microseconds;
@@ -29,6 +27,10 @@ using unit_us = std::chrono::microseconds;
 #else
     using duration_t = duration<unit_us>;
     using unit_t = unit_us;
+#endif
+
+#ifndef URL
+    #define URL URL_2
 #endif
 
 
@@ -78,10 +80,9 @@ private:
     std::vector<std::vector<int>> delays_list;
     std::vector<std::vector<int>> deadline_list;
     std::vector<double> avarage;
-    std::vector<int> requests{1, 10, 50, 100/*, 500, 1000, 5000, 10000, 100000, 1000000*/};
-    std::vector<double> percents{0.1,0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2};
-    //static constexpr std::array<double, PERCENT_COUNT> percents{0.1, 0.25};
-    //static constexpr std::array<int, REQUEST_COUNT> requests{1, 5, 10};
+    std::vector<int> requests{1, 10, 50, 100, 10000};
+    //std::vector<int> requests{1, 10, 50, 100, 500, 1000, 5000, 10000, 100000, 1000000};
+    std::vector<double> percents{0.5, 0.75, 1, 1.25, 2};
 public:
     TestRunner();
     ~TestRunner();

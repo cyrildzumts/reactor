@@ -25,7 +25,7 @@ int _main_(int argc, char const *argv[])
      * calling the same service through the circuit breaker
      */
     try {
-        fut_res = cb.execute(URL_2);
+        fut_res = cb.execute(URL);
         code = fut_res.get();
         LOG("Request Resutl : ", code);
     }
@@ -39,7 +39,7 @@ int _main_(int argc, char const *argv[])
      * calling the service directly
      */
     try {
-       code =  http_job(URL_2);
+       code =  http_job(URL);
     }
     catch(ServiceError &e){
         LOG_ERROR("MAIN -- Service Error : ", e.what());

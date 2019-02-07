@@ -49,8 +49,11 @@ CURLcode http_job(const std::string &url)
         curl_easy_setopt(curl,CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl,CURLOPT_USERAGENT, "circuit-breaker-agent/1.0");
         code = curl_easy_perform(curl);
+
         if(code == CURLE_FAILED_INIT){
+            #ifdef DEBUG_ON
             LOG("CHECK CURL init: curl init failed");
+            #endif
             exit(EXIT_FAILURE);
         }
         /*

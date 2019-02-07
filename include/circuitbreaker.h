@@ -12,7 +12,6 @@
 #include <chrono>
 #include <future>
 #include <memory>
-#include <log.h> // Logger
 
 /******************************************************************
  * Author : Cyrille Ngassam Nkwenga
@@ -93,7 +92,6 @@ public:
 
 private:
     Command<R, Args...> task;
-    //Command2<R, Args...> task;
     /**
      * @brief state this variable describe the current circuit breaker state
      */
@@ -188,7 +186,7 @@ private:
             } catch (const ServiceError &e) {
                 result_not_ready.set_exception(std::make_exception_ptr(e));
                 failure_count();
-                if(getFailure_counter() > getFailure_threshold()){
+                if(getFailure_counter() >= getFailure_threshold()){
                     ++failure_threshold_reached;
                     trip();
                 }
@@ -197,13 +195,11 @@ private:
         else if(status == std::future_status::timeout){
             result_not_ready.set_exception(std::make_exception_ptr(TimeoutError()));
             failure_count();
-            if(getFailure_counter() > getFailure_threshold()){
+            if(getFailure_counter() >= getFailure_threshold()){
                 ++failure_threshold_reached;
                 trip();
             }
-            else {
 
-            }
         }
         return result;
     }
@@ -299,10 +295,10 @@ public:
      */
 
     ~CircuitBreaker(){
-        if(usage){
-            ratio =100 * (static_cast<double>(successes)/usage);
-            ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage) * failure_threshold;
-        }
+//        if(usage){
+//            ratio =100 * (static_cast<double>(successes)/usage);
+//            ratio_trip =100 * (static_cast<double>(failure_threshold_reached)/usage) * failure_threshold;
+//        }
 #ifdef DEBUG_ON
         LOG("usage summary :\tsuccess =\t", successes, ";\terror = ", failures,
             ";\tusage : ",usage, ";\tdeadline(",TIME_UNIT,"): ",deadline.count(),
@@ -545,6 +541,9 @@ public:
      */
     void setPool(const std::shared_ptr<ThreadPool> &pool){
         this->pool = pool;
+    }
+    duration_ms_t getDeadline() const{
+        return deadline;
     }
 };
 

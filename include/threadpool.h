@@ -100,7 +100,6 @@ public:
         else {
             workers_count = WORKERS_SIZE;
         }
-
         for(size_t i = 0; i < workers_count; ++i){
             threads.push_back(std::thread(&ThreadPool::run, this));
         }
