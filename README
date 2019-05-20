@@ -1,5 +1,8 @@
+
 This repository contains an implementation of the circuit breaker pattern in C++.
 This work is a part of my bachelor thesis at the HAW Hamburg university.
+UPDATE : This code was a preview of my Thesis. The final and Updated code is not shared here publicly since it will serve as a basis 
+for a reactive C++ Library that will help  build reactive Systems.
 
 
 Cyrille Ngassam Nkwenga
